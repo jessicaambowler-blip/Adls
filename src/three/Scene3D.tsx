@@ -1,0 +1,457 @@
+import { Html, Line, OrbitControls } from '@react-three/drei';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { BuiltActivity } from '../activities/activities';
+import { useActivity } from '../activities/useActivity';
+import { layoutBounds, rotate } from '../model/geometry';
+import { chairFootprint } from '../model/pathfinding';
+import { CHAIRS } from '../model/catalogue';
+import { useStore } from '../model/store';
+import type { ActivitySettings, Item, Layout, LayoutKey } from '../model/types';
+import { ASSETS } from './assets';
+import { SUPPORT_PERSONA, applyPose, buildAvatar, type AvatarRig } from './avatar';
+import { buildItem } from './furniture';
+import { buildWalls, floorMaterial } from './walls';
+import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
+
+const P = (x: number, y: number, h = 0) => new THREE.Vector3(x / 1000, h / 1000, y / 1000);
+
+interface Live {
+  person?: AvatarRig;
+  helper?: AvatarRig;
+  chair?: THREE.Object3D;
+}
+
+// ---------------------------------------------------------------- environment & lights
+
+const EnvironmentSetup = () => {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    const pm = new THREE.PMREMGenerator(gl);
+    const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = env;
+    scene.environmentIntensity = 0.55;
+    scene.background = new THREE.Color('#dfe3e6');
+    return () => { env.dispose(); pm.dispose(); };
+  }, [gl, scene]);
+  return null;
+};
+
+const Lights = ({ layout, hq }: { layout: Layout; hq: boolean }) => {
+  const b = layoutBounds(layout);
+  const cx = (b.minX + b.maxX) / 2000, cz = (b.minY + b.maxY) / 2000;
+  const size = Math.max(b.maxX - b.minX, b.maxY - b.minY) / 1000 + 3;
+  const ref = useRef<THREE.DirectionalLight>(null);
+  useLayoutEffect(() => {
+    const l = ref.current;
+    if (!l) return;
+    l.target.position.set(cx, 0, cz);
+    l.target.updateMatrixWorld();
+    const cam = l.shadow.camera as THREE.OrthographicCamera;
+    cam.left = -size / 2; cam.right = size / 2; cam.top = size / 2; cam.bottom = -size / 2;
+    cam.near = 0.5; cam.far = 30;
+    cam.updateProjectionMatrix();
+  }, [cx, cz, size]);
+  return (
+    <>
+      <hemisphereLight args={['#fdfbf7', '#b7a690', 0.55]} />
+      <directionalLight
+        ref={ref}
+        position={[cx + 3.5, 7, cz + 2.5]}
+        intensity={1.9}
+        color="#fff6e8"
+        castShadow
+        shadow-mapSize={hq ? [2048, 2048] : [1024, 1024]}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.02}
+        shadow-radius={4}
+      />
+      <pointLight position={[cx, layout.ceilingHeight / 1000 - 0.15, cz]} intensity={2.2} distance={9} decay={2} color="#ffe2b8" />
+    </>
+  );
+};
+
+// ---------------------------------------------------------------- building
+
+const Walls = ({ layout }: { layout: Layout }) => {
+  const builds = useMemo(() => buildWalls(layout), [layout.walls, layout.openings, layout.ceilingHeight, layout.wallColor, layout.floor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const group = useRef<THREE.Group>(null);
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+  useFrame(({ camera }) => {
+    const mode = useStore.getState().wallMode;
+    const camAbove = camera.position.y > layout.ceilingHeight / 1000 + 0.2;
+    for (const w of builds) {
+      let cut = false;
+      if (mode === 'low') cut = true;
+      else if (mode === 'cutaway' && camAbove) {
+        if (!w.exterior) cut = true;
+        else cut = tmp.copy(camera.position).sub(w.mid).setY(0).dot(w.outward) > 0;
+      }
+      w.full.visible = !cut;
+      w.low.visible = cut;
+    }
+  });
+  return (
+    <group ref={group}>
+      {builds.map((w) => (
+        <group key={w.wall.id}>
+          <primitive object={w.full} />
+          <primitive object={w.low} />
+        </group>
+      ))}
+    </group>
+  );
+};
+
+const Floor = ({ layout }: { layout: Layout }) => {
+  const b = layoutBounds({ ...layout, items: [] });
+  const t = (layout.walls[0]?.thickness ?? 110) / 2;
+  const w = (b.maxX - b.minX - 2 * t) / 1000, d = (b.maxY - b.minY - 2 * t) / 1000;
+  const mat = useMemo(() => floorMaterial(layout, w, d), [layout.floor, w, d]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ceil = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f6f5f2', roughness: 0.95 }), []);
+  return (
+    <group>
+      <mesh rotation-x={-Math.PI / 2} position={[(b.minX + b.maxX) / 2000, 0, (b.minY + b.maxY) / 2000]} receiveShadow material={mat}>
+        <planeGeometry args={[w + 0.02, d + 0.02]} />
+      </mesh>
+      {/* ceiling: only visible from below (eye-level views) */}
+      <mesh rotation-x={Math.PI / 2} position={[(b.minX + b.maxX) / 2000, layout.ceilingHeight / 1000, (b.minY + b.maxY) / 2000]} material={ceil}>
+        <planeGeometry args={[w + 0.2, d + 0.2]} />
+      </mesh>
+      {/* surrounding ground (outside the room) */}
+      <mesh rotation-x={-Math.PI / 2} position={[(b.minX + b.maxX) / 2000, -0.003, (b.minY + b.maxY) / 2000]} receiveShadow>
+        <planeGeometry args={[w + 14, d + 14]} />
+        <meshStandardMaterial color="#cfd2cc" roughness={1} />
+      </mesh>
+    </group>
+  );
+};
+
+const SelectionBox = ({ item }: { item: Item }) => {
+  const pts = useMemo(() => {
+    const hw = item.w / 2000 + 0.03, hd = item.d / 2000 + 0.03;
+    return [[-hw, 0.012, -hd], [hw, 0.012, -hd], [hw, 0.012, hd], [-hw, 0.012, hd], [-hw, 0.012, -hd]] as [number, number, number][];
+  }, [item.w, item.d]);
+  return <Line points={pts} color="#ff8a00" lineWidth={3} />;
+};
+
+const ItemMesh = ({ item, selected }: { item: Item; selected: boolean }) => {
+  const obj = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color]); // eslint-disable-line react-hooks/exhaustive-deps
+  const select = useStore((s) => s.set);
+  return (
+    <group
+      position={[item.x / 1000, 0, item.y / 1000]}
+      rotation-y={THREE.MathUtils.degToRad(-item.rotation)}
+      onClick={(e) => { e.stopPropagation(); select({ selection: { type: 'item', id: item.id } }); }}
+    >
+      <group position-y={(item.elevation ?? 0) / 1000}>
+        <primitive object={obj} />
+      </group>
+      {selected && <SelectionBox item={item} />}
+    </group>
+  );
+};
+
+const ImportedItem = ({ item, selected, settings }: { item: Item; selected: boolean; settings: ActivitySettings }) => {
+  const assetVersion = useStore((s) => s.assetVersion);
+  const asset = item.assetId ? ASSETS.get(item.assetId) : undefined;
+  const select = useStore((s) => s.set);
+  const { obj, mixer, action } = useMemo(() => {
+    if (!asset) return { obj: null, mixer: null, action: null };
+    const o = SkeletonUtils.clone(asset.scene);
+    const mx = asset.clips.length ? new THREE.AnimationMixer(o) : null;
+    const ac = mx ? mx.clipAction(asset.clips[0]) : null;
+    ac?.play();
+    return { obj: o, mixer: mx, action: ac };
+  }, [asset, assetVersion]);
+  const driven = settings.type === 'imported' && (settings.importedItemId ? settings.importedItemId === item.id : true);
+  useFrame((_, dt) => {
+    if (!mixer || !action) return;
+    if (driven) mixer.setTime(useStore.getState().time);
+    else mixer.update(dt);
+  });
+  const sc = item.modelScale ?? 1;
+  return (
+    <group
+      position={[item.x / 1000, (item.elevation ?? 0) / 1000, item.y / 1000]}
+      rotation-y={THREE.MathUtils.degToRad(-item.rotation)}
+      onClick={(e) => { e.stopPropagation(); select({ selection: { type: 'item', id: item.id } }); }}
+    >
+      {obj && asset ? (
+        <group scale={sc} position={[-asset.centre.x * sc, -asset.minY * sc, -asset.centre.z * sc]}>
+          <primitive object={obj} />
+        </group>
+      ) : (
+        <mesh position-y={item.h / 2000} castShadow>
+          <boxGeometry args={[item.w / 1000, item.h / 1000, item.d / 1000]} />
+          <meshStandardMaterial color="#c9c3e6" transparent opacity={0.6} />
+          <Html center><div className="tag3d">Re-import “{item.label}”</div></Html>
+        </mesh>
+      )}
+      {selected && <SelectionBox item={item} />}
+    </group>
+  );
+};
+
+const Items = ({ layout, settings }: { layout: Layout; settings: ActivitySettings }) => {
+  const sel = useStore((s) => s.selection);
+  return (
+    <>
+      {layout.items.map((it) =>
+        it.kind === 'imported' ? (
+          <ImportedItem key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} settings={settings} />
+        ) : (
+          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} />
+        ),
+      )}
+    </>
+  );
+};
+
+// ---------------------------------------------------------------- people & equipment
+
+const Actors = ({ built, settings, live }: { built: BuiltActivity; settings: ActivitySettings; live: Live }) => {
+  const chair: ChairRig = useMemo(() => (settings.chair === 'manual' ? buildManualChair() : buildPowerChair()), [settings.chair]);
+  const person = useMemo(() => buildAvatar(settings.persona), [settings.persona]);
+  const helper = useMemo(() => buildAvatar(SUPPORT_PERSONA, 'support'), []);
+  live.person = person;
+  live.helper = built.helper ? helper : undefined;
+  live.chair = chair.root;
+  const q1 = useMemo(() => new THREE.Quaternion(), []);
+  const q2 = useMemo(() => new THREE.Quaternion(), []);
+  const X = useMemo(() => new THREE.Vector3(1, 0, 0), []);
+  const Y = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+
+  useFrame(() => {
+    const t = useStore.getState().time;
+    const c = built.chair(t);
+    chair.root.position.set(c.x / 1000, 0, c.y / 1000);
+    chair.root.rotation.y = THREE.MathUtils.degToRad(-c.heading);
+    for (const w of chair.wheels) w.obj.rotation.x = c.wheelTurn / 1000 / w.radius;
+    const place = (rig: AvatarRig, s: ReturnType<BuiltActivity['person']>) => {
+      rig.root.position.set(s.x / 1000, s.z / 1000, s.y / 1000);
+      q1.setFromAxisAngle(Y, THREE.MathUtils.degToRad(-s.heading));
+      q2.setFromAxisAngle(X, THREE.MathUtils.degToRad(s.pitch));
+      rig.root.quaternion.copy(q1).multiply(q2);
+      applyPose(rig, s.pose);
+    };
+    place(person, built.person(t));
+    if (built.helper) place(helper, built.helper(t));
+  });
+  return (
+    <>
+      <primitive object={chair.root} />
+      <primitive object={person.root} />
+      {built.helper && <primitive object={helper.root} />}
+    </>
+  );
+};
+
+const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: ActivitySettings }) => {
+  const route = built.route;
+  const C = CHAIRS[settings.chair];
+  const line = useMemo(() => (route ? route.samples.filter((_, i) => i % 3 === 0).map((s) => [s.x / 1000, 0.015, s.y / 1000] as [number, number, number]) : []), [route]);
+  const prints = useMemo(() => {
+    if (!route || !settings.showSweptPath) return [];
+    const out: [number, number, number][][] = [];
+    let last = -1e9;
+    for (const s of route.samples) {
+      if (s.dist - last < 220 && s !== route.samples[route.samples.length - 1]) continue;
+      last = s.dist;
+      const fp = chairFootprint(s, C.width, C.length);
+      out.push([...fp, fp[0]].map((p) => [p.x / 1000, 0.01, p.y / 1000]));
+    }
+    return out;
+  }, [route, settings.showSweptPath, C.width, C.length]);
+  if (!route || line.length < 2) return null;
+  return (
+    <group>
+      <Line points={line} color="#1e88e5" lineWidth={3} dashed dashSize={0.12} gapSize={0.06} />
+      {prints.map((p, i) => <Line key={i} points={p} color="#1e88e5" transparent opacity={0.22} lineWidth={1} />)}
+      {route.contacts.map((c, i) => (
+        <group key={i} position={[c.at.x / 1000, 0.02, c.at.y / 1000]}>
+          <mesh rotation-x={-Math.PI / 2}>
+            <ringGeometry args={[0.22, 0.28, 40]} />
+            <meshBasicMaterial color="#e53935" transparent opacity={0.85} />
+          </mesh>
+          {route.contacts.findIndex((x) => x.with === c.with) === i && (
+            <Html center position={[0, 0.9, 0]} zIndexRange={[10, 0]}><div className="tag3d warn">Possible contact: {c.with}</div></Html>
+          )}
+        </group>
+      ))}
+    </group>
+  );
+};
+
+const Pins = ({ layoutKey }: { layoutKey: LayoutKey }) => {
+  const notes = useStore((s) => s.project.notes);
+  return (
+    <>
+      {notes.filter((n) => n.pin && n.layout === layoutKey).map((n, i) => (
+        <group key={n.id} position={P(n.pin!.x, n.pin!.y)}>
+          <mesh position-y={1.6}>
+            <sphereGeometry args={[0.07, 20, 16]} />
+            <meshStandardMaterial color={n.category === 'concern' ? '#e53935' : '#7b1fa2'} emissive={n.category === 'concern' ? '#7a1010' : '#3a0e52'} />
+          </mesh>
+          <mesh position-y={0.8}>
+            <cylinderGeometry args={[0.008, 0.008, 1.6]} />
+            <meshBasicMaterial color="#555" />
+          </mesh>
+          <Html center position={[0, 1.8, 0]} zIndexRange={[10, 0]}><div className="tag3d">{i + 1}. {n.text.slice(0, 40)}{n.text.length > 40 ? '…' : ''}</div></Html>
+        </group>
+      ))}
+    </>
+  );
+};
+
+// ---------------------------------------------------------------- camera
+
+const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivity; live: Live }) => {
+  const controls = useRef<OrbitControlsImpl>(null);
+  const { camera } = useThree();
+  const preset = useStore((s) => s.camera);
+  const nonce = useStore((s) => s.cameraNonce);
+  const anim = useRef<{ from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; k: number } | null>(null);
+  const tmp = useMemo(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3() }), []);
+  const follow = preset === 'seated' || preset === 'support' || preset === 'follow';
+
+  const b = layoutBounds({ ...layout, items: [] });
+  const centre = new THREE.Vector3((b.minX + b.maxX) / 2000, 0.5, (b.minY + b.maxY) / 2000);
+  const size = Math.max(b.maxX - b.minX, b.maxY - b.minY) / 1000;
+
+  useEffect(() => {
+    if (follow) { anim.current = null; return; }
+    let pos: THREE.Vector3, target: THREE.Vector3;
+    if (preset === 'top') {
+      target = centre.clone().setY(0);
+      pos = centre.clone().add(new THREE.Vector3(0, size * 1.55 + 2.5, 0.01));
+    } else if (preset === 'closeup') {
+      const t = useStore.getState().time;
+      const c = built.chair(t);
+      const pk = built.parking ?? { x: c.x, y: c.y, heading: c.heading };
+      target = P(pk.x, pk.y, 650);
+      // look from the open part of the room towards the activity
+      const toC = new THREE.Vector3(centre.x - pk.x / 1000, 0, centre.z - pk.y / 1000);
+      if (toC.length() < 0.3) toC.set(1, 0, 1);
+      toC.normalize();
+      pos = target.clone().addScaledVector(toC, 2.2).setY(2.1);
+    } else {
+      target = centre.clone();
+      pos = centre.clone().add(new THREE.Vector3(-size * 0.35, size * 0.85 + 2.2, size * 0.75 + 1.8));
+    }
+    const ctl = controls.current;
+    anim.current = { from: camera.position.clone(), to: pos, tFrom: ctl ? ctl.target.clone() : target.clone(), tTo: target, k: 0 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, nonce, size, centre.x, centre.z]);
+
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    cam.fov = preset === 'seated' || preset === 'support' ? 68 : 50;
+    cam.updateProjectionMatrix();
+  }, [preset, camera]);
+
+  useFrame((_, dt) => {
+    const ctl = controls.current;
+    if (!ctl) return;
+    ctl.enabled = !follow;
+    if (anim.current) {
+      const a = anim.current;
+      a.k = Math.min(1, a.k + dt / 0.9);
+      const u = a.k * a.k * (3 - 2 * a.k);
+      camera.position.lerpVectors(a.from, a.to, u);
+      ctl.target.lerpVectors(a.tFrom, a.tTo, u);
+      if (a.k >= 1) anim.current = null;
+      ctl.update();
+      return;
+    }
+    if (!follow) return;
+    const t = useStore.getState().time;
+    const smooth = 1 - Math.pow(0.0005, dt);
+    if (preset === 'seated' && live.person) {
+      const head = live.person.head;
+      head.updateWorldMatrix(true, false);
+      const hp = head.localToWorld(tmp.a.set(0, 0.11, 0.11));
+      const fwd = tmp.b.set(0, 0, 1).transformDirection(head.matrixWorld);
+      fwd.y = Math.min(fwd.y, 0.1) - 0.18;
+      camera.position.lerp(hp, smooth);
+      ctl.target.lerp(tmp.c.copy(hp).addScaledVector(fwd.normalize(), 2), smooth);
+    } else if (preset === 'support') {
+      let eye: THREE.Vector3;
+      if (live.helper) {
+        live.helper.head.updateWorldMatrix(true, false);
+        eye = live.helper.head.localToWorld(tmp.a.set(0, 0.11, 0.1));
+      } else {
+        const c = built.chair(t);
+        const off = rotate({ x: -900, y: -1100 }, c.heading);
+        eye = P(c.x + off.x, c.y + off.y, 1600);
+      }
+      const p = built.person(t);
+      camera.position.lerp(eye, smooth);
+      ctl.target.lerp(P(p.x, p.y, p.z + 100), smooth);
+    } else if (preset === 'follow') {
+      const c = built.chair(t);
+      const back = rotate({ x: 0, y: -2300 }, c.heading);
+      camera.position.lerp(P(c.x + back.x, c.y + back.y, 1750), smooth);
+      const p = built.person(t);
+      ctl.target.lerp(P(p.x, p.y, 700), smooth);
+    }
+    camera.lookAt(ctl.target);
+  });
+
+  return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.4} maxDistance={30} />;
+};
+
+// ---------------------------------------------------------------- canvas
+
+const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
+  const layout = useStore((s) => s.project.layouts[layoutKey]);
+  const settings = useStore((s) => s.project.activity);
+  const hq = useStore((s) => s.highQuality);
+  const built = useActivity(layoutKey);
+  const live = useMemo<Live>(() => ({}), []);
+  return (
+    <>
+      <EnvironmentSetup />
+      <Lights layout={layout} hq={hq} />
+      <Floor layout={layout} />
+      <Walls layout={layout} />
+      <Items layout={layout} settings={settings} />
+      {settings.type !== 'imported' && <Actors built={built} settings={settings} live={live} />}
+      {settings.type !== 'imported' && <RouteOverlay built={built} settings={settings} />}
+      <Pins layoutKey={layoutKey} />
+      <CameraRig layout={layout} built={built} live={live} />
+      {hq && (
+        <EffectComposer multisampling={0} enableNormalPass={false}>
+          <N8AO aoRadius={0.45} intensity={2.2} distanceFalloff={0.6} halfRes quality="medium" />
+          <SMAA />
+        </EffectComposer>
+      )}
+    </>
+  );
+};
+
+export const Scene3D = ({ layoutKey, label }: { layoutKey: LayoutKey; label?: string }) => {
+  const hq = useStore((s) => s.highQuality);
+  const clear = useStore((s) => s.set);
+  return (
+    <div className="scene3d">
+      <Canvas
+        shadows={{ type: THREE.PCFSoftShadowMap }}
+        dpr={hq ? [1, 2] : [1, 1.25]}
+        gl={{ antialias: !hq, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05, preserveDrawingBuffer: true }}
+        camera={{ fov: 50, near: 0.05, far: 100, position: [-3, 6, 8] }}
+        onPointerMissed={() => clear({ selection: null })}
+      >
+        <Suspense fallback={null}>
+          <SceneContents layoutKey={layoutKey} />
+        </Suspense>
+      </Canvas>
+      {label && <div className={`scene-label ${layoutKey}`}>{label}</div>}
+    </div>
+  );
+};
