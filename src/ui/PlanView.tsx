@@ -8,6 +8,7 @@ import {
 import { chairFootprint } from '../model/pathfinding';
 import { useStore } from '../model/store';
 import { askValue } from './dialogs';
+import { runDetection } from './detectFlow';
 import type { Item, Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
 
 type Drag =
@@ -25,8 +26,12 @@ const pts = (p: Vec2[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
 const fitView = (layout: Layout, aspect: number): VB => {
   const b = layoutBounds(layout);
-  const minX = Math.min(b.minX, layout.start.x) - 500, maxX = Math.max(b.maxX, layout.start.x) + 500;
-  const minY = Math.min(b.minY, layout.start.y) - 500, maxY = Math.max(b.maxY, layout.start.y) + 500;
+  const bg = layout.background;
+  // include the uploaded drawing so the whole plan is visible
+  const bx0 = bg ? bg.x : Infinity, by0 = bg ? bg.y : Infinity;
+  const bx1 = bg ? bg.x + bg.pxWidth * bg.scale : -Infinity, by1 = bg ? bg.y + bg.pxHeight * bg.scale : -Infinity;
+  const minX = Math.min(b.minX, layout.start.x, bx0) - 500, maxX = Math.max(b.maxX, layout.start.x, bx1) + 500;
+  const minY = Math.min(b.minY, layout.start.y, by0) - 500, maxY = Math.max(b.maxY, layout.start.y, by1) + 500;
   let w = maxX - minX, h = maxY - minY;
   if (w / h > aspect) h = w / aspect; else w = h * aspect;
   return { x: (minX + maxX) / 2 - w / 2, y: (minY + maxY) / 2 - h / 2, w, h };
@@ -129,6 +134,9 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const [draw, setDraw] = useState<Vec2[]>([]);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [calib, setCalib] = useState<Vec2[]>([]);
+  const [area, setArea] = useState<{ a: Vec2; b: Vec2 } | null>(null);
+  const detection = useStore((s) => (s.detection?.layoutKey === layoutKey ? s.detection : undefined));
+  const detecting = useStore((s) => s.detecting);
   const pointers = useRef(new Map<number, Vec2>());
   const pinch = useRef<{ d: number; vb: VB } | null>(null);
 
@@ -138,7 +146,8 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     setVb(fitView(layout, aspect));
   }, [layout]);
   // fit when the room structure changes size substantially
-  const structKey = `${layout.walls.length}:${Math.round(layoutBounds({ ...layout, items: [] }).maxX / 500)}:${Math.round(layoutBounds({ ...layout, items: [] }).maxY / 500)}`;
+  const bgKey = layout.background ? `${layout.background.pxWidth}:${Math.round(layout.background.scale * 100)}` : '';
+  const structKey = `${bgKey}:${layout.walls.length}:${Math.round(layoutBounds({ ...layout, items: [] }).maxX / 500)}:${Math.round(layoutBounds({ ...layout, items: [] }).maxY / 500)}`;
   useEffect(() => { fit(); }, [structKey, layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = wrapRef.current;
@@ -184,6 +193,10 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       setDrag(null);
       return;
     }
+    if (tool === 'detect-area') {
+      setArea({ a: p, b: p });
+      return;
+    }
     if (tool === 'draw-room') {
       const q = snapDraw(p);
       if (draw.length >= 3 && dist(q, draw[0]) < vb.w / 60) {
@@ -204,6 +217,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           updateLayout((l) => {
             if (!l.background) return;
             l.background.scale *= k;
+            l.background.calibrated = true;
             // keep the first picked point fixed
             l.background.x = next[0].x - (next[0].x - l.background.x) * k;
             l.background.y = next[0].y - (next[0].y - l.background.y) * k;
@@ -253,6 +267,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       setVb({ x: cx - (v0.w * k) / 2, y: cy - (v0.h * k) / 2, w: v0.w * k, h: v0.h * k });
       return;
     }
+    if (area) { setArea({ ...area, b: p }); return; }
     if (tool === 'draw-room') setCursor(snapDraw(p));
     else if (tool === 'calibrate') setCursor(p);
     if (!drag) return;
@@ -318,13 +333,18 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 
   const onUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId);
+    if (area) {
+      const big = Math.abs(area.a.x - area.b.x) > 1500 && Math.abs(area.a.y - area.b.y) > 1500;
+      if (big) runDetection(layoutKey, area.a, area.b);
+      setArea(null);
+    }
     if (pointers.current.size < 2) pinch.current = null;
     setDrag(null);
   };
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setDraw([]); setCalib([]); set({ tool: 'select' }); }
+      if (e.key === 'Escape') { setDraw([]); setCalib([]); setArea(null); set({ tool: 'select' }); }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -402,9 +422,11 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           </>
         )}
         {o.kind === 'sliding-door' && <line x1={s.x} y1={s.y} x2={e.x} y2={e.y} className="door-leaf" transform={`translate(${n.x * 40} ${n.y * 40})`} />}
-        <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle">
-          {o.kind === 'opening' ? `${o.width} opening` : `~${clearOpening(o)} clear`}
-        </text>
+        {(sel || o.width > fs * 5) && (
+          <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle">
+            {o.kind === 'opening' ? `${o.width} opening` : `~${clearOpening(o)} clear`}
+          </text>
+        )}
       </g>
     );
   };
@@ -487,9 +509,11 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
                   startDrag(e, { kind: 'wall', id: w.id, start: toPlan(e), orig: layout.walls.map((x) => ({ ...x, a: { ...x.a }, b: { ...x.b } })) });
                 }}
               />
-              <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle" pointerEvents="none">
-                {Math.round(L - w.thickness)}
-              </text>
+              {(sel || L > fs * 9) && (
+                <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle" pointerEvents="none">
+                  {Math.round(L - w.thickness)}
+                </text>
+              )}
             </g>
           );
         })}
@@ -548,6 +572,18 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
             )}
           </g>
         )}
+        {area && <rect x={Math.min(area.a.x, area.b.x)} y={Math.min(area.a.y, area.b.y)} width={Math.abs(area.a.x - area.b.x)} height={Math.abs(area.a.y - area.b.y)} className="detect-area" pointerEvents="none" />}
+        {detection && (
+          <g pointerEvents="none" className="proposal">
+            {detection.walls.map((w) => <line key={w.id} x1={w.a.x} y1={w.a.y} x2={w.b.x} y2={w.b.y} className="prop-wall" strokeWidth={Math.max(w.thickness, vb.w / 300)} />)}
+            {detection.openings.map((o) => {
+              const w = detection.walls.find((x) => x.id === o.wallId);
+              if (!w) return null;
+              const s = wallPoint(w, o.offset - o.width / 2), e = wallPoint(w, o.offset + o.width / 2);
+              return <line key={o.id} x1={s.x} y1={s.y} x2={e.x} y2={e.y} className={`prop-open ${o.kind}`} strokeWidth={Math.max(w.thickness * 2.2, vb.w / 160)} />;
+            })}
+          </g>
+        )}
         {tool === 'calibrate' && calib.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={fs * 0.5} className="draw-pt" />)}
         {tool === 'calibrate' && calib.length === 1 && cursor && <line x1={calib[0].x} y1={calib[0].y} x2={cursor.x} y2={cursor.y} className="draw-line" />}
       </svg>
@@ -557,11 +593,15 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         <button onClick={() => setVb((v) => ({ x: v.x - v.w * 0.125, y: v.y - v.h * 0.125, w: v.w * 1.25, h: v.h * 1.25 }))} aria-label="Zoom out">－</button>
         <button onClick={fit}>Fit</button>
       </div>
+      {detecting && <div className="tool-banner">Finding walls…</div>}
+      {detection && <div className="tool-banner review">Review the walls found (blue), doors (red), windows (teal) and openings (orange), then choose “Use these walls” in the side panel.</div>}
+      {!detection && layout.unverified && tool === 'select' && <div className="verify-flag">Walls found automatically · measurements not yet checked</div>}
       {tool !== 'select' && (
         <div className="tool-banner">
           {tool === 'draw-room' && 'Click each corner of the room. Click the first corner again to finish. (Esc to cancel)'}
           {tool === 'calibrate' && 'Click two points on the plan whose real distance you know (e.g. the ends of a dimension line).'}
           {tool === 'pin-note' && 'Click on the plan where the note applies.'}
+          {tool === 'detect-area' && !detecting && 'Drag a box around the floor you want to turn into 3D. (Esc to cancel)'}
         </div>
       )}
       <div className="plan-legend">

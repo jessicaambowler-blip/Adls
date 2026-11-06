@@ -144,6 +144,22 @@ svg.plan.crosshair { cursor: crosshair; }
 .pin text { fill: #fff; font-weight: 700; }
 .draw-line { fill: none; stroke: #ff8a00; stroke-width: 24; }
 .draw-pt { fill: #ff8a00; }
+.detect-area { fill: rgba(21, 101, 192, 0.08); stroke: #1565c0; stroke-width: 30; stroke-dasharray: 120 60; }
+.prop-wall { stroke: rgba(21, 101, 192, 0.85); stroke-linecap: square; }
+.prop-open { stroke-linecap: butt; }
+.prop-open.door { stroke: #e53935; }
+.prop-open.window { stroke: #00a3b4; }
+.prop-open.opening { stroke: #f59f00; }
+.tool-banner.review { background: #1565c0; }
+.verify-flag { position: absolute; left: 8px; top: 8px; background: #fff3cd; color: #6a4b00; border: 1px solid #f0c36d; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.review-card { background: #eef5fd; border: 2px solid #1565c0; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+.review-card h3 { margin: 0; }
+.legend-row { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.legend-row i { display: inline-block; width: 14px; height: 6px; margin-right: 4px; vertical-align: middle; }
+.toggle-inline { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.toggle-inline input { width: 20px; height: 20px; }
+.verify-card { background: #fff8e1; border: 2px solid #f0c36d; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.verify-card h3 { margin: 0 0 4px; }
 .plan-tools { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .plan-tools button { min-width: 44px; background: rgba(255, 255, 255, 0.95); font-weight: 700; }
 .tool-banner { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: #ff8a00; color: #fff; padding: 8px 14px; border-radius: 8px; font-weight: 600; max-width: 80%; text-align: center; }

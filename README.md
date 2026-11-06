@@ -43,7 +43,7 @@ imported stay on the local computer; nothing is uploaded.
 | Intuitive environment editing | Linked 2D floor plan: drag furniture, walls (connected walls stretch), doors and windows; type exact mm values; wall items snap to walls; templates; draw a custom room outline; undo/redo; keyboard nudging. 3D updates immediately. |
 | Compare changes | Separate **Existing** and **Proposed** layouts, “Copy existing → proposed”, and **Compare** mode showing both side by side with synchronised playback. |
 | Functional detail | Door clear-opening estimates, live clearance dimensions from a selected item to the nearest wall/furniture, automatic wheelchair route with swept footprint (“space used by the chair”), red “possible contact” markers, chair parking outline, turning-space marker. Plain-language route summary with explicit caveats. |
-| Floor plans | Upload an image or PDF, set its scale by clicking two points with a known distance, then trace walls over it. |
+| Floor plans | Upload an image or PDF, set its scale from a known distance, then let the app find walls, doors and windows automatically (with a review step), or trace them by hand. |
 | Discussion & documentation | Notes tagged concern/preference/idea/question/decision, who raised it, optional pin on the plan, and the exact moment in the activity (click to jump back). Printable/downloadable session summary with 3D snapshots, layout facts, list of changes and notes. |
 | Reuse existing assets | Import GLB/glTF or FBX models (furniture, equipment, MetaHumans). Animated files can drive the timeline as an “Imported animation” activity. |
 
@@ -64,11 +64,39 @@ imported stay on the local computer; nothing is uploaded.
   not authentic. Authentic quality requires the original motion-capture data (or new captures).
   The path for this is ready in the app (glTF import + timeline-driven animation), but the assets
   themselves must come from the original Unreal project (see below).
-* **Automatic 3D generation from a floor plan** – not included. Reliable automatic wall detection
-  from arbitrary plans (scans, hand drawings, PDFs with furniture and dimension lines) is an open
-  problem; a vision model or OpenCV line detector could propose walls, but the result must always be
-  verified, so the current “trace over the plan with calibrated scale” step is the honest baseline.
-  A suggested next step is an “auto-suggest walls” button whose output is shown for confirmation.
+* **Automatic 3D generation from a floor plan** – a first version is included (see below). It works
+  well on clean, orthogonal plans and always goes through a review step, because a drawing is not
+  a measurement: door symbols and scaled lines can differ from what was actually built.
+
+### Floor plan → 3D (automatic detection)
+
+1. *Room → Use an existing floor plan → Upload floor plan…* (image or PDF).
+2. *Set scale*: click two points a known distance apart (a dimension line, or a room whose size you
+   know) and type the distance.
+3. *Find walls automatically*, then drag a box around the floor to use (plans often show several).
+4. Review the proposal over the drawing: walls (blue), doors (red), windows (teal), openings and
+   double doors (orange). Choose *Use these walls*, *Try a different area* or *Discard*.
+5. Fix anything wrong with the normal editing tools. The layout is flagged **“measurements not yet
+   checked”** (on the plan, in the route summary) until someone confirms the key measurements.
+
+How it works (`src/model/detect.ts`, runs entirely in the browser – the plan is not uploaded
+anywhere): walls are the heaviest lines on a plan, so it keeps only dark pixels at least as thick as
+the plan's wall strokes, collects long horizontal/vertical runs, joins collinear pieces across
+doorway-sized gaps, snaps ends together at corners and T-junctions, and discards isolated pieces
+(text, symbols). Each gap is then classified by what is drawn there: a swing arc or door leaves
+beside it = door; unbroken thin parallel lines across it = window. The wheelchair start point is
+put outside the exterior doorway from which the most floor area can be reached.
+
+Tested on a 536-pixel-wide image of a Queenslander plan (two floors on one sheet) and on the same
+image at 4× resolution. Most walls, the verandah French doors and windows were found; some short
+internal walls (bathroom/WC partitions, linen cupboards) and some internal doors were missed.
+
+Known limits: orthogonal walls only (angled walls such as a bay or octagonal alfresco must be drawn
+with *Draw room outline*); no reading of dimension text or room names yet; double/French doors
+become openings; furniture is not detected. Planned improvements: reading vector PDFs directly
+(exact geometry), reading dimension labels to set the scale automatically, and optional AI-assisted
+recognition of doors, fixtures and room names (subject to consent for sending a plan to a cloud
+service).
 
 ## Architecture
 
@@ -80,6 +108,7 @@ src/
     templates.ts    Bedroom, bathroom, hallway, kitchen, blank room
     geometry.ts     Plan maths (walls, rotations, polygon overlap)
     pathfinding.ts  Clearance-aware A* route on a 50 mm grid, smoothing, footprint contact check
+    detect.ts       Wall/door/window detection from raster floor plans
     edit.ts         Wall moves, room resizing, existing→proposed difference list
     store.ts        App state (zustand), undo/redo, autosave
   activities/
@@ -145,7 +174,7 @@ sequences are now.
 3. Multi-room homes (room-to-room routes, door swings that block routes), ceiling hoist tracks,
    bathroom wet-area falls, kitchen reach ranges.
 4. Personal equipment profiles (actual chair width/length/turning, footplate length, bed height).
-5. “Auto-suggest walls” from uploaded plans (with mandatory verification step).
+5. Floor-plan detection: vector-PDF reading, dimension-label reading, angled walls, multi-floor.
 6. Shared sessions (OT and consumer on different devices) and export to PDF report templates.
 
 ## Accessibility notes

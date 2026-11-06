@@ -280,3 +280,46 @@ export const sampleAt = (samples: PoseSample[], t: number): { x: number; y: numb
 };
 
 export { dirOfHeading };
+
+/**
+ * For each candidate start, flood-fill the floor a wheelchair can reach. Returns the start that
+ * reaches the most floor inside the house, and the most open reachable spot as a goal.
+ */
+export const exploreFrom = (layout: Layout, starts: (Vec2 & { heading: number })[], chairWidth: number) => {
+  if (!starts.length) return null;
+  const grid = new Grid(layout, obstaclesOf(layout), starts);
+  const b = layoutBounds({ ...layout, items: [] });
+  const need = chairWidth / 2 + 20;
+  let best: { start: Vec2 & { heading: number }; goal: Vec2; reached: number } | null = null;
+  for (const st of starts) {
+    const s = grid.cellOf(st);
+    const W = grid.w, N = W * grid.h;
+    const seen = new Uint8Array(N);
+    const q = [s.j * W + s.i];
+    seen[q[0]] = 1;
+    let reached = 0, goalK = -1, goalScore = -1;
+    while (q.length) {
+      const k = q.pop()!;
+      const i = k % W, j = Math.floor(k / W);
+      const p = grid.centre(i, j);
+      const inside = p.x > b.minX + 200 && p.x < b.maxX - 200 && p.y > b.minY + 200 && p.y < b.maxY - 200;
+      if (inside) {
+        reached++;
+        const score = Math.min(grid.clearance[k], 1500) + Math.min(800, dist(p, st) / 4);
+        if (score > goalScore) { goalScore = score; goalK = k; }
+      }
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= W || nj >= grid.h) continue;
+        const nk = nj * W + ni;
+        if (seen[nk]) continue;
+        // let the flood start right next to a wall (the start point sits outside a doorway)
+        if (grid.clearance[nk] < need && dist(grid.centre(ni, nj), st) > 500) continue;
+        seen[nk] = 1;
+        q.push(nk);
+      }
+    }
+    if (goalK >= 0 && (!best || reached > best.reached)) best = { start: st, goal: grid.centre(goalK % W, Math.floor(goalK / W)), reached };
+  }
+  return best;
+};

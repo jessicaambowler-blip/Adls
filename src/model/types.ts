@@ -81,6 +81,8 @@ export interface PlanBackground {
   x: number; // mm position of the image's top-left corner
   y: number;
   opacity: number;
+  /** true once the user has set the scale from a known distance */
+  calibrated?: boolean;
   pxWidth: number;
   pxHeight: number;
 }
@@ -94,6 +96,8 @@ export interface Layout {
   wallColor: string;
   ceilingHeight: number;
   background?: PlanBackground;
+  /** walls were generated automatically and the measurements have not been confirmed yet */
+  unverified?: boolean;
   /** where the activity starts and (for "move around") ends */
   start: Vec2 & { heading: number };
   end: Vec2;

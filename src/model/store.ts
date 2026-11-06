@@ -13,7 +13,15 @@ export type Selection =
 export type CameraPreset = 'overview' | 'top' | 'seated' | 'support' | 'follow' | 'closeup';
 export type ViewMode = 'split' | '3d' | 'plan';
 export type WallMode = 'cutaway' | 'full' | 'low';
-export type Tool = 'select' | 'draw-room' | 'calibrate' | 'pin-note';
+export type Tool = 'select' | 'draw-room' | 'calibrate' | 'pin-note' | 'detect-area';
+
+/** Walls/openings proposed by automatic detection, waiting for review (plan mm). */
+export interface DetectionProposal {
+  walls: import('./types').Wall[];
+  openings: import('./types').Opening[];
+  counts: { walls: number; doors: number; windows: number; openings: number };
+  layoutKey: import('./types').LayoutKey;
+}
 
 interface UiState {
   activeLayout: LayoutKey;
@@ -33,6 +41,8 @@ interface UiState {
   showSummary: boolean;
   showHelp: boolean;
   pendingPin?: { x: number; y: number };
+  detection?: DetectionProposal;
+  detecting?: boolean;
 }
 
 interface State extends UiState {

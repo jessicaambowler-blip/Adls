@@ -8,6 +8,48 @@ import type { FloorFinish, Item, Opening } from '../model/types';
 import { loadModelFile } from '../three/assets';
 import { NumberField, Section, Segmented } from './controls';
 import { ask, notify } from './dialogs';
+import { acceptDetection } from './detectFlow';
+
+const ReviewCard = () => {
+  const d = useStore((s) => s.detection);
+  const set = useStore((s) => s.set);
+  const layout = useStore((s) => s.layout());
+  const [clear, setClear] = useState(true);
+  if (!d) return null;
+  const c = d.counts;
+  return (
+    <div className="review-card" role="region" aria-label="Review detected walls">
+      <h3>Walls found – please review</h3>
+      <p className="muted">Found <b>{c.walls}</b> walls, <b>{c.doors}</b> doors, <b>{c.windows}</b> windows and <b>{c.openings}</b> other openings. Compare them with the plan underneath. Anything missing or wrong can be fixed after you accept.</p>
+      <div className="legend-row">
+        <span><i style={{ background: '#1565c0' }} />wall</span><span><i style={{ background: '#e53935' }} />door</span>
+        <span><i style={{ background: '#00a3b4' }} />window</span><span><i style={{ background: '#f59f00' }} />opening / double door</span>
+      </div>
+      {!layout.background?.calibrated && <p className="callout">⚠ The plan's scale has not been set, so all sizes are guesses. Set the scale first for real measurements.</p>}
+      {layout.items.length > 0 && (
+        <label className="toggle-inline"><input type="checkbox" checked={clear} onChange={(e) => setClear(e.target.checked)} /> Remove the current furniture</label>
+      )}
+      <div className="btnrow">
+        <button className="primary" onClick={() => acceptDetection(clear)}>Use these walls</button>
+        <button onClick={() => set({ detection: undefined, tool: 'detect-area' })}>Try a different area</button>
+        <button onClick={() => set({ detection: undefined })}>Discard</button>
+      </div>
+    </div>
+  );
+};
+
+const VerifyCard = () => {
+  const layout = useStore((s) => s.layout());
+  const updateLayout = useStore((s) => s.updateLayout);
+  if (!layout.unverified) return null;
+  return (
+    <div className="verify-card">
+      <h3>Check the measurements</h3>
+      <p className="muted">These walls were found automatically from a drawing. Before relying on them, compare the room sizes and door widths with the plan's dimensions or a site measure. Click a wall or door to correct it.</p>
+      <div className="btnrow"><button onClick={() => updateLayout((l) => { l.unverified = false; })}>I've checked the key measurements</button></div>
+    </div>
+  );
+};
 
 const FLOORS: { value: FloorFinish; label: string }[] = [
   { value: 'timber', label: 'Timber' }, { value: 'tiles', label: 'Tiles' }, { value: 'vinyl', label: 'Vinyl' }, { value: 'carpet', label: 'Carpet' },
@@ -242,6 +284,8 @@ export const RoomPanel = () => {
   return (
     <div className="panel-body">
       {busy && <div className="busy">{busy}</div>}
+      <ReviewCard />
+      <VerifyCard />
       {selItem && <ItemInspector it={selItem} />}
       {selOpening && <OpeningInspector o={selOpening} />}
       {selection?.type === 'wall' && <WallInspector id={selection.id} />}
@@ -262,12 +306,18 @@ export const RoomPanel = () => {
         </div>
       </Section>
 
-      <Section title="2. Trace an existing floor plan" open={!selection && !layout.background}>
-        <p className="muted">Upload a plan (image or PDF) to trace over. Then set its scale by clicking two points with a known distance. Automatic room detection is not included in this prototype – always check measurements on site.</p>
+      <Section title="2. Use an existing floor plan" open={!selection}>
+        <p className="muted">Upload a plan (image or PDF). Set its scale by clicking two points a known distance apart, then let the app find the walls, doors and windows, or trace them yourself. Automatic results are a starting point and must be checked.</p>
         <input ref={planInput} type="file" accept="image/*,.pdf" hidden onChange={(e) => { onPlanFile(e.target.files?.[0]); e.target.value = ''; }} />
         <div className="btnrow">
           <button onClick={() => planInput.current?.click()}>Upload floor plan…</button>
-          {layout.background && <button onClick={() => set({ tool: 'calibrate', selection: null })}>Set scale</button>}
+          {layout.background && <button className={layout.background.calibrated ? '' : 'primary'} onClick={() => set({ tool: 'calibrate', selection: null })}>{layout.background.calibrated ? 'Scale set ✓ – change' : 'Set scale'}</button>}
+          {layout.background && (
+            <button className={layout.background.calibrated ? 'primary' : ''} onClick={async () => {
+              if (!layout.background?.calibrated && !(await ask('The plan’s scale has not been set yet, so detected sizes will be wrong. Find walls anyway?', 'Find walls anyway'))) return;
+              set({ tool: 'detect-area', selection: null, detection: undefined });
+            }}>Find walls automatically</button>
+          )}
           {layout.background && <button className="danger" onClick={() => updateLayout((l) => { l.background = undefined; })}>Remove plan</button>}
         </div>
         {layout.background && (

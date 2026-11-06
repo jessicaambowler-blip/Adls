@@ -12,6 +12,7 @@ const BOTTOMS = ['#2f3440', '#46505e', '#5a4636', '#24262a', '#6b7b8c'];
 
 export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layoutKey: LayoutKey }) => {
   const chair = useStore((s) => s.project.activity.chair);
+  const unverified = useStore((s) => s.project.layouts[layoutKey].unverified);
   const r = built.route;
   if (built.problem && (!r || !built.target)) return <div className="result warn">{built.problem}</div>;
   if (!r) return null;
@@ -25,6 +26,7 @@ export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layou
       {r.status === 'tight' && <>The route is <b>tight</b>{r.minSideClearance < 999 && <> – roughly {Math.max(0, r.minSideClearance)} mm each side at the narrowest point</>}.{contacts.length > 0 && <> The chair outline overlaps the <b>{contacts.join(', ')}</b> (red rings) – worth discussing.</>}</>}
       {r.status === 'blocked' && <>No route could be found for a {C.width} mm wide chair. The animation shows the chair passing through obstacles so you can see where.</>}
       {built.problem && <div className="problem">⚠ {built.problem}</div>}
+      {unverified && <div className="problem">⚠ Room measurements came from automatic detection and have not been checked yet.</div>}
       <div className="small">Travel takes about {r.duration.toFixed(0)} s in this animation.</div>
     </div>
   );
