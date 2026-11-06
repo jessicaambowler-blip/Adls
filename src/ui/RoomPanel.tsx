@@ -7,6 +7,7 @@ import { TEMPLATES, blankRoom, cloneLayout, makeItem } from '../model/templates'
 import type { FloorFinish, Item, Opening } from '../model/types';
 import { loadModelFile } from '../three/assets';
 import { NumberField, Section, Segmented } from './controls';
+import { ask, notify } from './dialogs';
 
 const FLOORS: { value: FloorFinish; label: string }[] = [
   { value: 'timber', label: 'Timber' }, { value: 'tiles', label: 'Tiles' }, { value: 'vinyl', label: 'Vinyl' }, { value: 'carpet', label: 'Carpet' },
@@ -192,8 +193,8 @@ export const RoomPanel = () => {
     set({ selection: { type: 'item', id: it.id } });
   };
 
-  const applyTemplate = (make: () => ReturnType<typeof blankRoom>) => {
-    if (layout.items.length && !window.confirm(`Replace the ${active} layout with this template? (You can undo.)`)) return;
+  const applyTemplate = async (make: () => ReturnType<typeof blankRoom>) => {
+    if (layout.items.length && !(await ask(`Replace the ${active} layout with this template? You can undo this.`, 'Replace layout'))) return;
     const l = make();
     replaceLayout(active === 'proposed' ? cloneLayout(l, 'Proposed') : l);
   };
@@ -207,7 +208,7 @@ export const RoomPanel = () => {
       const b = rect ? rect.width * 1.4 : 6000;
       updateLayout((l) => { l.background = { dataUrl, pxWidth: w, pxHeight: h, scale: b / w, x: -b * 0.2, y: -b * 0.2 * (h / w), opacity: 0.55 }; });
     } catch (e) {
-      alert(`Sorry, that file could not be read (${(e as Error).message}).`);
+      notify(`That file could not be read (${(e as Error).message}). Try a PNG, JPG or PDF.`);
     }
     setBusy('');
   };
@@ -226,12 +227,12 @@ export const RoomPanel = () => {
       updateLayout((l) => { l.items.push(it); });
       bump();
       set({ selection: { type: 'item', id: it.id } });
-      if (a.clips.length && window.confirm(`“${f.name}” contains ${a.clips.length} animation(s) (${a.clips[0].duration.toFixed(1)} s). Play it with the timeline as the activity?`)) {
+      if (a.clips.length && (await ask(`“${f.name}” contains ${a.clips.length} animation(s) (${a.clips[0].duration.toFixed(1)} s). Play it with the timeline as the activity?`, 'Play with timeline'))) {
         updateActivity({ type: 'imported', importedItemId: it.id });
         set({ time: 0 });
       }
     } catch (e) {
-      alert(`Sorry, that model could not be loaded (${(e as Error).message}). GLB files work best.`);
+      notify(`That model could not be loaded (${(e as Error).message}). GLB files work best.`);
     }
     setBusy('');
   };

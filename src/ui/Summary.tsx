@@ -8,6 +8,7 @@ import type { Layout, LayoutKey } from '../model/types';
 import { RouteSummary } from './ActivityPanel';
 import { fmtTime } from './controls';
 import { CATEGORIES } from './NotesPanel';
+import { HOSTED } from './dialogs';
 
 const LayoutFacts = ({ l }: { l: Layout }) => {
   const r = rectInfo(l);
@@ -59,8 +60,12 @@ export const Summary = () => {
     <div className="modal" role="dialog" aria-modal="true" aria-label="Session summary">
       <div className="modal-card wide">
         <div className="modal-actions no-print">
-          <button className="primary" onClick={() => window.print()}>Print / save as PDF</button>
-          <button onClick={download}>Download summary</button>
+          {HOSTED ? <span className="muted">Printing and downloads are available in the installed version.</span> : (
+            <>
+              <button className="primary" onClick={() => window.print()}>Print / save as PDF</button>
+              <button onClick={download}>Download summary</button>
+            </>
+          )}
           <button onClick={() => set({ showSummary: false })}>Close</button>
         </div>
         <div className="no-print grid2">
@@ -126,6 +131,7 @@ export const Help = () => {
         <h3>Keyboard</h3>
         <p>Space: play/pause · Arrow keys: nudge selected item (Shift = 100 mm) · R: rotate 90° · Delete: remove · Ctrl+Z / Ctrl+Y: undo / redo</p>
         <h3>Please remember</h3>
+        {HOSTED && <p className="muted">You are using the online preview: your work is kept in this browser only. To keep a copy, use the installed version, which can save project files.</p>}
         <p className="caveat">This is a research prototype for discussion. It does not check compliance with standards and is not a substitute for clinical reasoning or on-site measurement. The avatar and movements are placeholders until authentic VisADLs motion-capture assets are imported.</p>
         <div className="modal-actions"><button className="primary" onClick={() => set({ showHelp: false })}>Got it</button></div>
       </div>

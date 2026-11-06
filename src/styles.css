@@ -19,7 +19,7 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
-html, body { overflow: hidden; }
+html, body { overflow: hidden; background: var(--bg); }
 .app { overflow: hidden; }
 
 button {
@@ -246,6 +246,8 @@ svg.plan.crosshair { cursor: crosshair; }
 .modal-card { background: #fff; border-radius: 14px; padding: 18px 22px; max-width: 640px; width: 100%; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); }
 .modal-card.wide { max-width: 1000px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+.modal-card.dialog { max-width: 440px; margin-top: 12vh; display: flex; flex-direction: column; gap: 12px; }
+.dialog-msg { margin: 0; font-size: 16px; line-height: 1.45; }
 .help-steps li { margin-bottom: 8px; }
 .summary-doc h1 { color: #173a5e; margin-bottom: 0; }
 .summary-doc h2 { color: #173a5e; border-bottom: 2px solid var(--line); padding-bottom: 4px; margin-top: 26px; }

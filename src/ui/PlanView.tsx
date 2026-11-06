@@ -7,6 +7,7 @@ import {
 } from '../model/geometry';
 import { chairFootprint } from '../model/pathfinding';
 import { useStore } from '../model/store';
+import { askValue } from './dialogs';
 import type { Item, Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
 
 type Drag =
@@ -194,7 +195,9 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       const next = [...calib, p];
       if (next.length === 2) {
         const measured = dist(next[0], next[1]);
-        const ans = window.prompt(`You picked two points ${Math.round(measured)} mm apart (at the current scale).\nWhat is the real distance between them, in millimetres?`, String(Math.round(measured)));
+        setCalib([]);
+        set({ tool: 'select' });
+        askValue(`You picked two points ${Math.round(measured)} mm apart at the current scale. What is the real distance between them?`, 'Real distance (mm)', String(Math.round(measured)), 'Set scale').then((ans) => {
         const real = ans ? parseFloat(ans) : NaN;
         if (real > 0 && layout.background) {
           const k = real / measured;
@@ -206,8 +209,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
             l.background.y = next[0].y - (next[0].y - l.background.y) * k;
           });
         }
-        setCalib([]);
-        set({ tool: 'select' });
+        });
       } else setCalib(next);
       return;
     }

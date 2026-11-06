@@ -10,6 +10,7 @@ import { PlanView } from './ui/PlanView';
 import { RoomPanel } from './ui/RoomPanel';
 import { Help, Summary } from './ui/Summary';
 import { Timeline } from './ui/Timeline';
+import { Dialogs, HOSTED, ask, notify } from './ui/dialogs';
 
 const LABEL: Record<LayoutKey, string> = { existing: 'Existing home', proposed: 'Proposed changes' };
 
@@ -87,7 +88,7 @@ const TopBar = () => {
       if (p.version !== 1 || !p.layouts) throw new Error('not a VisADLs project');
       s.loadProject(p);
     } catch (e) {
-      alert(`Could not open that file: ${(e as Error).message}`);
+      notify(`Could not open that file: ${(e as Error).message}`);
     }
   };
   return (
@@ -99,7 +100,7 @@ const TopBar = () => {
           { value: 'proposed', label: <><i className="dot proposed" />Proposed</> },
         ]} />
         <button className={s.compare ? 'on' : ''} onClick={() => s.set({ compare: !s.compare })} title="Show existing and proposed side by side">⇆ Compare</button>
-        <button onClick={() => { if (window.confirm('Copy the existing layout into “Proposed”, replacing what is there? (You can undo.)')) s.copyExistingToProposed(); }} title="Start the proposed layout from the existing one">Copy existing → proposed</button>
+        <button onClick={async () => { if (await ask('Copy the existing layout into “Proposed”, replacing what is there? You can undo this.', 'Copy to proposed')) s.copyExistingToProposed(); }} title="Start the proposed layout from the existing one">Copy existing → proposed</button>
       </div>
       <div className="right">
         <Segmented<ViewMode> label="View" value={s.viewMode} onChange={(v) => s.set({ viewMode: v })} options={[{ value: 'plan', label: 'Plan' }, { value: 'split', label: 'Both' }, { value: '3d', label: '3D' }]} />
@@ -107,7 +108,7 @@ const TopBar = () => {
         <button onClick={s.redo} disabled={!s.future.length} aria-label="Redo">↷</button>
         <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { open(e.target.files?.[0]); e.target.value = ''; }} />
         <button onClick={() => fileRef.current?.click()}>Open</button>
-        <button onClick={save}>Save</button>
+        {!HOSTED && <button onClick={save}>Save</button>}
         <button className="primary" onClick={() => s.set({ showSummary: true, playing: false })}>Summary</button>
         <button onClick={() => s.set({ showHelp: true })} aria-label="Help">?</button>
       </div>
@@ -169,6 +170,7 @@ export default function App() {
       </main>
       {showSummary && <Summary />}
       {showHelp && <Help />}
+      <Dialogs />
     </div>
   );
 }
