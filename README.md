@@ -80,16 +80,34 @@ imported stay on the local computer; nothing is uploaded.
    checked”** (on the plan, in the route summary) until someone confirms the key measurements.
 
 How it works (`src/model/detect.ts`, runs entirely in the browser – the plan is not uploaded
-anywhere): walls are the heaviest lines on a plan, so it keeps only dark pixels at least as thick as
-the plan's wall strokes, collects long horizontal/vertical runs, joins collinear pieces across
-doorway-sized gaps, snaps ends together at corners and T-junctions, and discards isolated pieces
-(text, symbols). Each gap is then classified by what is drawn there: a swing arc or door leaves
-beside it = door; unbroken thin parallel lines across it = window. The wheelchair start point is
-put outside the exterior doorway from which the most floor area can be reached.
+anywhere). Plans draw walls in one of two ways, and the detector tries both and keeps the result that
+looks most like a connected building:
 
-Tested on a 536-pixel-wide image of a Queenslander plan (two floors on one sheet) and on the same
-image at 4× resolution. Most walls, the verandah French doors and windows were found; some short
-internal walls (bathroom/WC partitions, linen cupboards) and some internal doors were missed.
+* **Solid** (brochures, builders' plans): walls are the heaviest, darkest strokes, so it keeps dark
+  pixels at least as thick as the plan's wall strokes.
+* **Outline** (most CAD exports): walls are two thin parallel lines; wherever two long parallel lines
+  are a wall-thickness apart (under ~340 mm) the space between them is filled in.
+
+It then collects long horizontal/vertical runs, joins collinear pieces across doorway-sized gaps,
+snaps ends together at corners and T-junctions, and discards isolated pieces (text, symbols). Each
+gap is classified by what is drawn there: a swing arc or door leaves beside it = door; unbroken thin
+parallel lines across it = window. Big images are read in tiles and shrunk to at most 3,400 px a side
+(keeping thin lines visible), so a large plan never needs a huge amount of memory. The wheelchair
+start point is put outside the exterior doorway from which the most floor area can be reached.
+
+**Benchmark** – `npm run bench` scores the detector against 7 floors with ground-truth wall
+positions from [MLSTRUCT-FP](https://github.com/MLSTRUCT/MLSTRUCT-FP) (MIT licence; plans 9,500 px
+wide, including a colour CAD apartment plan with furniture and text):
+
+| | precision | recall |
+|---|---|---|
+| Solid-walls detector only (first version) | 14% | 13% |
+| Solid + outline detection (current) | **91%** | **84%** |
+
+Precision is the share of detected wall length that lies on a real wall; recall is the share of real
+wall length found. The dataset labels structural walls only, so on the detailed apartment plan real
+partition walls count against precision. The Queenslander plan used during development (not
+included, copyright unknown) gives the same result as before.
 
 Known limits: orthogonal walls only (angled walls such as a bay or octagonal alfresco must be drawn
 with *Draw room outline*); no reading of dimension text or room names yet; double/French doors
@@ -108,7 +126,8 @@ src/
     templates.ts    Bedroom, bathroom, hallway, kitchen, blank room
     geometry.ts     Plan maths (walls, rotations, polygon overlap)
     pathfinding.ts  Clearance-aware A* route on a 50 mm grid, smoothing, footprint contact check
-    detect.ts       Wall/door/window detection from raster floor plans
+    detect.ts       Wall/door/window detection from raster floor plans (solid and outline styles)
+bench/            npm run bench: detection accuracy against ground-truth plans
     edit.ts         Wall moves, room resizing, existing→proposed difference list
     store.ts        App state (zustand), undo/redo, autosave
   activities/

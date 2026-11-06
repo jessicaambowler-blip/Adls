@@ -175,8 +175,9 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   };
 
   const startDrag = (e: React.PointerEvent, d: Drag) => {
-    e.stopPropagation();
+    // while a tool (scale, draw, pin, detect) is active, let the click reach the tool
     if (tool !== 'select') return;
+    e.stopPropagation();
     svgRef.current?.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (d && d.kind !== 'pan') checkpoint();
@@ -391,7 +392,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     const s = wallPoint(w, o.offset - o.width / 2);
     const e = wallPoint(w, o.offset + o.width / 2);
     const sel = selection?.type === 'opening' && selection.id === o.id;
-    const common = { onPointerDown: (ev: React.PointerEvent) => { set({ selection: { type: 'opening', id: o.id } }); startDrag(ev, { kind: 'opening', id: o.id }); } };
+    const common = { onPointerDown: (ev: React.PointerEvent) => { if (tool !== 'select') return; set({ selection: { type: 'opening', id: o.id } }); startDrag(ev, { kind: 'opening', id: o.id }); } };
     const thick = w.thickness;
     const gap = [add(s, mul(wallNormal(w), thick / 2)), add(e, mul(wallNormal(w), thick / 2)), add(e, mul(wallNormal(w), -thick / 2)), add(s, mul(wallNormal(w), -thick / 2))];
     const mid = wallPoint(w, o.offset);
@@ -475,6 +476,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
               transform={`translate(${it.x} ${it.y}) rotate(${it.rotation})`}
               className={`item-g ${sel ? 'selected' : ''} ${it.id === built.target?.id ? 'target' : ''}`}
               onPointerDown={(e) => {
+                if (tool !== 'select') return;
                 set({ selection: { type: 'item', id: it.id } });
                 const p = toPlan(e);
                 startDrag(e, { kind: 'item', id: it.id, offset: sub(p, { x: it.x, y: it.y }) });
@@ -505,6 +507,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
                 className={`wall-hit ${sel ? 'selected' : ''}`}
                 strokeWidth={Math.max(w.thickness, vb.w / 90)}
                 onPointerDown={(e) => {
+                  if (tool !== 'select') return;
                   set({ selection: { type: 'wall', id: w.id } });
                   startDrag(e, { kind: 'wall', id: w.id, start: toPlan(e), orig: layout.walls.map((x) => ({ ...x, a: { ...x.a }, b: { ...x.b } })) });
                 }}
@@ -540,13 +543,13 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         {settings.type !== 'imported' && <LiveChair layoutKey={layoutKey} />}
 
         {/* start / end markers */}
-        <g className="marker start" onPointerDown={(e) => { set({ selection: { type: 'start' } }); startDrag(e, { kind: 'start', offset: sub(toPlan(e), layout.start) }); }}>
+        <g className="marker start" onPointerDown={(e) => { if (tool !== 'select') return; set({ selection: { type: 'start' } }); startDrag(e, { kind: 'start', offset: sub(toPlan(e), layout.start) }); }}>
           <circle cx={layout.start.x} cy={layout.start.y} r={fs * 1.2} />
           <line x1={layout.start.x} y1={layout.start.y} x2={startTip.x} y2={startTip.y} />
           <text x={layout.start.x} y={layout.start.y + fs * 0.35} fontSize={fs * 0.9} textAnchor="middle">S</text>
         </g>
         {settings.type === 'navigate' && (
-          <g className="marker end" onPointerDown={(e) => { set({ selection: { type: 'end' } }); startDrag(e, { kind: 'end', offset: sub(toPlan(e), layout.end) }); }}>
+          <g className="marker end" onPointerDown={(e) => { if (tool !== 'select') return; set({ selection: { type: 'end' } }); startDrag(e, { kind: 'end', offset: sub(toPlan(e), layout.end) }); }}>
             <circle cx={layout.end.x} cy={layout.end.y} r={fs * 1.2} />
             <text x={layout.end.x} y={layout.end.y + fs * 0.35} fontSize={fs * 0.9} textAnchor="middle">E</text>
           </g>

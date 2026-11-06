@@ -56,48 +56,106 @@ export const toGray = (img: { data: Uint8ClampedArray | Uint8Array; width: numbe
   return g;
 };
 
-export const detectPlan = (gray: Uint8Array, W: number, H: number, opt: DetectOptions): DetectResult => {
-  const R = opt.rect ?? { x0: 0, y0: 0, x1: W, y1: H };
-  const x0 = Math.max(0, Math.floor(R.x0)), y0 = Math.max(0, Math.floor(R.y0));
-  const x1 = Math.min(W, Math.ceil(R.x1)), y1 = Math.min(H, Math.ceil(R.y1));
-  const mm = opt.mmPerPx;
-  const px = (mmv: number) => mmv / mm;
-
-  // --- 1. dark mask and stroke thickness
-  const thr = opt.darkThreshold ?? 105;
-  const dark = new Uint8Array(W * H);
-  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (gray[y * W + x] < thr) dark[y * W + x] = 1;
-
-  // local stroke thickness = min(horizontal run, vertical run) through each dark pixel
-  const hRun = new Uint16Array(W * H), vRun = new Uint16Array(W * H);
+/** horizontal and vertical run length through every set pixel of a mask */
+const runLengths = (m: Uint8Array, W: number, x0: number, y0: number, x1: number, y1: number) => {
+  const h = new Uint16Array(m.length), v = new Uint16Array(m.length);
   for (let y = y0; y < y1; y++) {
     let x = x0;
     while (x < x1) {
-      if (!dark[y * W + x]) { x++; continue; }
-      let e = x; while (e < x1 && dark[y * W + e]) e++;
-      for (let k = x; k < e; k++) hRun[y * W + k] = e - x;
+      if (!m[y * W + x]) { x++; continue; }
+      let e = x; while (e < x1 && m[y * W + e]) e++;
+      const L = Math.min(65535, e - x);
+      for (let k = x; k < e; k++) h[y * W + k] = L;
       x = e;
     }
   }
   for (let x = x0; x < x1; x++) {
     let y = y0;
     while (y < y1) {
-      if (!dark[y * W + x]) { y++; continue; }
-      let e = y; while (e < y1 && dark[e * W + x]) e++;
-      for (let k = y; k < e; k++) vRun[k * W + x] = e - y;
+      if (!m[y * W + x]) { y++; continue; }
+      let e = y; while (e < y1 && m[e * W + x]) e++;
+      const L = Math.min(65535, e - y);
+      for (let k = y; k < e; k++) v[k * W + x] = L;
       y = e;
     }
   }
-  const thick: number[] = [];
-  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-    const k = y * W + x;
-    if (dark[k] && Math.max(hRun[k], vRun[k]) >= px(500)) thick.push(Math.min(hRun[k], vRun[k]));
+  return { h, v };
+};
+
+export type PlanStyle = 'solid' | 'outline';
+
+/**
+ * Detect walls, trying both drawing styles and keeping the result that looks most like a building:
+ *  - 'solid': walls drawn as heavy filled lines (typical of brochures and builders' plans)
+ *  - 'outline': walls drawn as two thin parallel lines (typical of CAD exports)
+ */
+export const detectPlan = (gray: Uint8Array, W: number, H: number, opt: DetectOptions & { style?: PlanStyle }): DetectResult & { style: PlanStyle } => {
+  if (opt.style) return { ...detectWith(gray, W, H, opt, opt.style), style: opt.style };
+  const a = detectWith(gray, W, H, opt, 'solid');
+  const b = detectWith(gray, W, H, opt, 'outline');
+  return b.score > a.score * 1.15 ? { ...b, style: 'outline' } : { ...a, style: 'solid' };
+};
+
+const detectWith = (gray: Uint8Array, W: number, H: number, opt: DetectOptions, style: PlanStyle): DetectResult & { score: number } => {
+  const R = opt.rect ?? { x0: 0, y0: 0, x1: W, y1: H };
+  const x0 = Math.max(0, Math.floor(R.x0)), y0 = Math.max(0, Math.floor(R.y0));
+  const x1 = Math.min(W, Math.ceil(R.x1)), y1 = Math.min(H, Math.ceil(R.y1));
+  const mm = opt.mmPerPx;
+  const px = (mmv: number) => mmv / mm;
+
+  // --- 1. a mask of "wall material"
+  let src: Uint8Array;
+  if (style === 'solid') {
+    // walls are the darkest, heaviest strokes
+    const thr = opt.darkThreshold ?? 105;
+    src = new Uint8Array(W * H);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (gray[y * W + x] < thr) src[y * W + x] = 1;
+  } else {
+    // walls are pairs of long parallel lines a wall-thickness apart: fill the space between them
+    const inkM = new Uint8Array(W * H);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (gray[y * W + x] < 235) inkM[y * W + x] = 1;
+    const r = runLengths(inkM, W, x0, y0, x1, y1);
+    const minEdge = Math.max(6, px(600));
+    const maxT = Math.max(2, px(340));
+    src = new Uint8Array(W * H);
+    // horizontal walls: walk down each column looking for two long horizontal edges close together
+    for (let x = x0; x < x1; x++) {
+      let last = -1e9;
+      for (let y = y0; y < y1; y++) {
+        const k = y * W + x;
+        if (!inkM[k] || r.h[k] < minEdge) continue;
+        const gap = y - last - 1;
+        if (gap >= 1 && gap <= maxT) for (let yy = last; yy <= y; yy++) src[yy * W + x] = 1;
+        last = y;
+      }
+    }
+    for (let y = y0; y < y1; y++) {
+      let last = -1e9;
+      for (let x = x0; x < x1; x++) {
+        const k = y * W + x;
+        if (!inkM[k] || r.v[k] < minEdge) continue;
+        const gap = x - last - 1;
+        if (gap >= 1 && gap <= maxT) for (let xx = last; xx <= x; xx++) src[y * W + xx] = 1;
+        last = x;
+      }
+    }
   }
-  const p90 = thick.length ? [...thick].sort((a, b) => a - b)[Math.floor(thick.length * 0.9)] : 1;
-  const strokePx = Math.max(1, Math.round(p90 * 0.55));
+
+  // local stroke thickness = min(horizontal run, vertical run) through each pixel
+  const { h: hRun, v: vRun } = runLengths(src, W, x0, y0, x1, y1);
+  const thick: number[] = [];
+  for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) {
+    const k = y * W + x;
+    // only long strokes no thicker than a real wall count (ignores filled areas such as paving grids)
+    if (src[k] && Math.max(hRun[k], vRun[k]) >= px(500) && Math.min(hRun[k], vRun[k]) <= Math.max(2, px(450))) thick.push(Math.min(hRun[k], vRun[k]));
+  }
+  thick.sort((a, b) => a - b);
+  // solid plans: walls are the heaviest strokes (upper end of the range); outline plans: every
+  // filled band is a candidate wall, so take the typical one
+  const ref = thick.length ? thick[Math.floor(thick.length * (style === 'solid' ? 0.9 : 0.5))] : 1;
+  const strokePx = Math.max(1, Math.round(ref * (style === 'solid' ? 0.55 : 0.45)));
   const wall = new Uint8Array(W * H);
-  for (let k = 0; k < wall.length; k++) if (dark[k] && Math.min(hRun[k], vRun[k]) >= strokePx) wall[k] = 1;
-  // pixels that are part of a long thin line but belong to a thick stroke along the other axis are kept above
+  for (let k = 0; k < wall.length; k++) if (src[k] && Math.min(hRun[k], vRun[k]) >= strokePx) wall[k] = 1;
 
   // --- 2. runs -> segments
   const minRun = Math.max(4, px(420));
@@ -289,5 +347,8 @@ export const detectPlan = (gray: Uint8Array, W: number, H: number, opt: DetectOp
     }
   }
   const md = median(doorGaps);
-  return { walls, openings, strokePx, scaleFromDoors: doorGaps.length >= 2 && md > 0 ? 840 / md : undefined };
+  // how building-like is the result? long walls that connect to others at both ends score highest
+  let score = 0;
+  for (const l of L) score += (l.s1 - l.s0) * mm * ((touches(l, l.s0) ? 1 : 0) + (touches(l, l.s1) ? 1 : 0)) / 2;
+  return { walls, openings, strokePx, scaleFromDoors: doorGaps.length >= 2 && md > 0 ? 840 / md : undefined, score };
 };
