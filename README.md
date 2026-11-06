@@ -160,6 +160,10 @@ Key design decisions:
 
 ## Bringing in the original VisADLs assets
 
+**The original Unreal project has been located** (Google Drive, *ADLS files / ADLs_Final*, Unreal
+Engine 5.5) with all three scenes – P1Turn360, P2BedTransfer, P3Hallway. An export script that runs
+inside Unreal is in [`tools/unreal/`](tools/unreal/README.md). The general steps below still apply.
+
 When the original Unreal project (`.uproject` + `Content/`) is available:
 
 1. **Avatars and wheelchairs.** In Unreal, select the MetaHuman / wheelchair skeletal meshes and
