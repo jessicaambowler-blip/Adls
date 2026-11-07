@@ -15,19 +15,20 @@ What is in the project (from the Drive listing):
 
 ## Steps
 
-1. Copy the whole `ADLs_Final` folder (with `Content`, `Config` and `ADLs_Final.uproject`) from Drive
-   to the computer and open `ADLs_Final.uproject` with Unreal Engine 5.5.
-2. Optional but recommended: *Edit > Plugins*, search **glTF Exporter**, tick it, restart.
-3. *Tools > Execute Python Script…* and choose [`export_visadls.py`](export_visadls.py).
-4. When it finishes, upload the folder `Saved/VisADLsExport` back to Google Drive.
+1. Open `ADLs_Final.uproject` in Unreal Engine 5.5 and wait until the editor has fully loaded.
+2. Menu **Tools → Execute Python Script…** and choose `export_visadls.py`.
+3. Unreal opens each of the three scenes in turn and shows progress pop-ups. The bed transfer is
+   about five minutes of recording, so this step can take several minutes. Don't click anything.
+4. A **"Finished"** message appears and the output folder opens by itself
+   (`<project folder>/Saved/VisADLsExport_v2`).
+5. Upload that whole `VisADLsExport_v2` folder to Google Drive.
+6. When you close Unreal it may ask to save changes – choose **Don't Save**.
 
-The script only reads the project. It writes, for each scene, a whole-scene FBX (everyone animated
-together, so the person, carer, wheelchair and bed stay in sync), a `.glb` if the glTF Exporter is
-on, one animation file per animated person/wheelchair, every prop as its own model, an
-`inventory.txt` of all sequences/animations/meshes, and `export_log.txt`.
+### Results of the first run (version 1)
 
-The script has not been run yet (Unreal is not available in the environment it was written in), so
-the first run may need adjusting – the log says which step failed.
+The equipment exported, but the people did not: the original scenes create the people and
+wheelchairs only while their sequence is open, and version 1 did not open it. Version 2 opens each
+sequence first and also writes `sequence_report.txt`, describing how the movement is stored.
 
 ## Then
 
