@@ -17,12 +17,11 @@ What is in the project (from the Drive listing):
 
 1. Open `ADLs_Final.uproject` in Unreal Engine 5.5 and wait until the editor has fully loaded.
 2. Menu **Tools → Execute Python Script…** and choose `export_visadls.py`.
-3. Unreal opens each of the three scenes and steps through it frame by frame (you will see the
-   people move). The bed transfer is five minutes of recording, so this takes roughly 10–20 minutes.
-   Leave Unreal in front and don't click anything.
+3. Unreal opens each of the three scenes and plays it once at normal speed while recording (you
+   will see the people move). About 6 minutes in total. Leave Unreal in front and don't click anything.
 4. A **"Finished"** message appears and the output folder opens by itself
-   (`<project folder>/Saved/VisADLsExport_v3`).
-5. Upload that whole `VisADLsExport_v3` folder to Google Drive.
+   (`<project folder>/Saved/VisADLsExport_v4`).
+5. Upload that whole `VisADLsExport_v4` folder to Google Drive.
 6. When you close Unreal it may ask to save changes – choose **Don't Save**.
 
 ### Results so far
@@ -35,6 +34,10 @@ What is in the project (from the Drive listing):
 * Version 3 records the movement itself: it steps through each sequence and writes every bone's
   rotation, each person's position and each piece of equipment's position 30 times a second
   (`<scene>_motion.json` + `<scene>_motion.bin`), plus the room objects and all meshes.
+
+* Version 3 found no people (it listed level actors, which leaves out the temporary actors
+  Sequencer spawns) and stepped so slowly in the background that the bed transfer took 5 hours.
+  Version 4 asks Sequencer for its live objects and records while the scene plays in real time.
 
 ### Results of the first run (version 1)
 

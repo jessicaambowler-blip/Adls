@@ -1,5 +1,5 @@
 """
-VisADLs export script – version 3 ("record the movement").
+VisADLs export script – version 4 ("record the movement").
 
 Records the people, equipment and movement of the original VisADLs scenes (Unreal Engine 5.5
 project ADLs_Final) so they can be rebuilt in the VisADLs web app.
@@ -13,9 +13,9 @@ HOW TO RUN (Unreal Engine 5.5):
   1. Open ADLs_Final.uproject and wait until the editor has fully loaded.
   2. Menu: Tools > Execute Python Script...  and choose this file.
   3. Unreal opens each scene and steps through it. You will see the people move in the viewport.
-     The bed transfer is 5 minutes long, so this takes roughly 10-20 minutes in total.
+     Each scene plays once at normal speed while it records: about 6 minutes in total.
      Leave Unreal in front and don't click anything until the "Finished" message appears.
-  4. The output folder opens by itself: <project>/Saved/VisADLsExport_v3
+  4. The output folder opens by itself: <project>/Saved/VisADLsExport_v4
   5. Upload that whole folder to Google Drive.
   6. When you close Unreal, if it asks to save anything, choose "Don't Save".
 
@@ -39,10 +39,9 @@ SCENES = [
     ("P3Hallway", "/Game/P3Hallway", "/Game/Persona3Sequence/P3Hallway"),
 ]
 SAMPLE_FPS = 30      # recorded frames per second
-WAIT_TICKS = 2       # editor ticks to wait after moving the timeline, so the pose has updated
 TEST_SECONDS = None  # set e.g. to 5 to record only the first 5 seconds of each scene (quick test)
 
-OUT_ROOT = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_saved_dir()), "VisADLsExport_v3")
+OUT_ROOT = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_saved_dir()), "VisADLsExport_v4")
 log_lines = []
 
 
@@ -137,6 +136,30 @@ def level_actors():
     return list(unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors())
 
 
+def world_actors():
+    """All actors in the editor world, including the temporary ones Sequencer spawns."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    try:
+        return list(unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor))
+    except Exception:
+        return level_actors()
+
+
+def sequencer_bound_actors(seq):
+    """Ask the open Sequencer which live objects each binding currently controls."""
+    found = []
+    for b in seq.get_bindings():
+        try:
+            objs = list(unreal.LevelSequenceEditorBlueprintLibrary.get_bound_objects(b))
+        except Exception as e:
+            objs = []
+        for o in objs:
+            a = o if isinstance(o, unreal.Actor) else (o.get_owner() if isinstance(o, unreal.ActorComponent) else None)
+            if a and a not in found:
+                found.append(a)
+    return found
+
+
 def binding_names(seq):
     names = set()
     for b in seq.get_bindings():
@@ -214,12 +237,19 @@ def collect_targets(name, seq, before):
     out_dir = os.path.join(OUT_ROOT, name)
     mesh_dir = os.path.join(out_dir, "meshes")
     names = binding_names(seq)
-    actors = level_actors()
+    actors = world_actors()
+    from_sequencer = sequencer_bound_actors(seq)
     spawned = [a for a in actors if a.get_path_name() not in before]
     named = [a for a in actors if a.get_actor_label() in names or cls_name(a).replace("_C", "") in names]
+    wanted = ("BP_Persona", "Wheelchair", "Hoist", "P1_", "P2_", "P3_")
+    by_class = [a for a in actors if any(w.lower() in cls_name(a).lower() for w in wanted)]
+    log(f"{name}: actors in world {len(actors)}, from Sequencer {len(from_sequencer)}, newly spawned {len(spawned)}, "
+        f"matching binding names {len(named)}, matching classes {len(by_class)}")
+    log(f"{name}: bindings {sorted(names)}")
+    log(f"{name}: newly spawned {[cls_name(a) for a in spawned][:20]}")
     targets = []
-    for a in spawned + [a for a in named if a not in spawned]:
-        if a not in targets:
+    for a in from_sequencer + by_class + named:
+        if a not in targets and cls_name(a) not in ("LevelSequenceActor", "WorldSettings", "Brush"):
             targets.append(a)
     people, props = [], []
     for a in targets:
@@ -316,55 +346,85 @@ class Recorder:
 
     def after_spawn(self):
         self.people, self.props, self.room = collect_targets(self.name, self.seq, self.before)
+        if not self.people and getattr(self, "retries", 0) < 3:
+            # Sequencer may need a little longer to create the people
+            self.retries = getattr(self, "retries", 0) + 1
+            log(f"{self.name}: no people yet, waiting a little longer (try {self.retries})")
+            unreal.LevelSequenceEditorBlueprintLibrary.set_current_time(1)
+            self.wait = 30
+            return
+        self.retries = 0
         rate = self.seq.get_display_rate()
         self.display_fps = rate.numerator / rate.denominator
-        start = self.seq.get_playback_start_seconds()
-        end = self.seq.get_playback_end_seconds()
+        self.start_s = self.seq.get_playback_start_seconds()
+        self.end_s = self.seq.get_playback_end_seconds()
         if TEST_SECONDS:
-            end = min(end, start + TEST_SECONDS)
-        self.times = [start + i / SAMPLE_FPS for i in range(int((end - start) * SAMPLE_FPS) + 1)]
+            self.end_s = min(self.end_s, self.start_s + TEST_SECONDS)
+        self.times = []
         self.frame = 0
         self.data = bytearray()
         self.last_pose = None
         self.static_frames = 0
-        log(f"{self.name}: recording {len(self.times)} frames ({end - start:.1f} s at {SAMPLE_FPS} fps)")
-        self.goto(0)
+        self.last_t = None
+        self.stalled = 0
+        log(f"{self.name}: playing and recording {self.end_s - self.start_s:.1f} s")
+        unreal.LevelSequenceEditorBlueprintLibrary.set_current_time(int(round(self.start_s * self.display_fps)))
+        unreal.LevelSequenceEditorBlueprintLibrary.play()
         self.state = "sampling"
-
-    def goto(self, i):
-        f = int(round(self.times[i] * self.display_fps))
-        unreal.LevelSequenceEditorBlueprintLibrary.set_current_time(f)
-        self.wait = WAIT_TICKS
+        self.wait = 2
 
     def sample(self):
+        t = unreal.LevelSequenceEditorBlueprintLibrary.get_current_time() / self.display_fps
+        if self.last_t is not None:
+            if t < self.last_t - 0.5 or t >= self.end_s - 0.5 / self.display_fps:
+                self.stop_playing()
+                return
+            if abs(t - self.last_t) < 1e-6:
+                self.stalled += 1
+                if self.stalled > 300:
+                    warn(f"{self.name}: playback seems to have stopped at {t:.1f} s")
+                    self.stop_playing()
+                return
+        self.stalled = 0
+        if self.last_t is not None and t - self.last_t < 1.0 / SAMPLE_FPS - 1e-4:
+            return  # keep at most SAMPLE_FPS samples per second
+        self.last_t = t
+        self.times.append(t)
         buf = self.data
+        buf += struct.pack("<f", t)
         mark = None
         for k, (p, _) in enumerate(self.people):
             buf += struct.pack("<10f", *tf_list(p.body.get_world_transform()))
             for i in p.moving:
-                t = p.body.get_socket_transform(p.bones[i], unreal.RelativeTransformSpace.RTS_PARENT_BONE_SPACE).translation
-                buf += struct.pack("<3f", t.x, t.y, t.z)
+                tr = p.body.get_socket_transform(p.bones[i], unreal.RelativeTransformSpace.RTS_PARENT_BONE_SPACE).translation
+                buf += struct.pack("<3f", tr.x, tr.y, tr.z)
             if k == 0:
                 mark = len(buf)
-            for b in p.bones:
-                q = p.body.get_socket_transform(b, unreal.RelativeTransformSpace.RTS_PARENT_BONE_SPACE).rotation
-                vals = (q.x, q.y, q.z, q.w)
-                buf += struct.pack("<4h", *(max(-32767, min(32767, int(round(v * 32767)))) for v in vals))
-        # check that the poses really change from frame to frame
+            for bn in p.bones:
+                q = p.body.get_socket_transform(bn, unreal.RelativeTransformSpace.RTS_PARENT_BONE_SPACE).rotation
+                buf += struct.pack("<4h", *(max(-32767, min(32767, int(round(v * 32767)))) for v in (q.x, q.y, q.z, q.w)))
+        for a, _ in self.props:
+            buf += struct.pack("<10f", *tf_list(a.get_actor_transform()))
         if mark is not None:
             sig = bytes(buf[mark:mark + len(self.people[0][0].bones) * 8])
             if sig == self.last_pose:
                 self.static_frames += 1
             self.last_pose = sig
-        for a, _ in self.props:
-            buf += struct.pack("<10f", *tf_list(a.get_actor_transform()))
         self.frame += 1
         if self.frame % (SAMPLE_FPS * 10) == 0:
-            log(f"{self.name}: {self.frame}/{len(self.times)} frames recorded")
-        if self.frame < len(self.times):
-            self.goto(self.frame)
-        else:
-            self.end_scene()
+            log(f"{self.name}: recorded up to {t:.0f} s of {self.end_s:.0f} s")
+
+    def stop_playing(self):
+        try:
+            unreal.LevelSequenceEditorBlueprintLibrary.pause()
+        except Exception:
+            pass
+        n = len(self.times)
+        rate = n / max(0.1, (self.times[-1] - self.times[0])) if n > 1 else 0
+        log(f"{self.name}: recorded {n} samples (about {rate:.0f} per second)")
+        if rate and rate < 10:
+            warn(f"{self.name}: only about {rate:.0f} samples per second - keep Unreal in front while it records")
+        self.end_scene()
 
     def end_scene(self, failed=False):
         out_dir = os.path.join(OUT_ROOT, self.name)
@@ -375,8 +435,10 @@ class Recorder:
                 "units": "Unreal: centimetres, Z up, left-handed (X forward, Y right)",
                 "fps": SAMPLE_FPS,
                 "frames": self.frame,
+                "sample_times": "stored at the start of every frame (playback speed varies)",
                 "start_seconds": self.times[0] if self.times else 0,
-                "frame_layout": "per frame: for each person [world transform of Body: 10 float32] "
+                "end_seconds": self.times[-1] if self.times else 0,
+                "frame_layout": "per frame: [time in seconds: 1 float32] then for each person [world transform of Body: 10 float32] "
                                 "[translation of 'moving' bones: 3 float32 each] [local rotation of every bone: 4 int16 /32767]; "
                                 "then for each moving object [world transform: 10 float32]. "
                                 "Transforms are tx,ty,tz,qx,qy,qz,qw,sx,sy,sz.",
@@ -395,7 +457,7 @@ class Recorder:
             log(f"{self.name}: saved {self.frame} frames ({len(self.data) // 1024} KB)")
             if self.people and self.frame > 10 and self.static_frames > 0.9 * self.frame:
                 warn(f"{self.name}: the people's poses hardly changed between frames ({self.static_frames}/{self.frame} identical). "
-                     "Unreal may not have updated them in time - try again with WAIT_TICKS = 4 at the top of the script.")
+                     "Unreal may not have been updating them while playing.")
             else:
                 log(f"{self.name}: {self.static_frames} of {self.frame} frames had the same pose as the frame before")
         try:
@@ -411,7 +473,7 @@ class Recorder:
         log("DONE")
         problems = [l for l in log_lines if l.startswith("WARNING")]
         msg = (f"Finished recording.\n\nThe results are in:\n{OUT_ROOT}\n\n"
-               "That folder will now open. Upload the whole 'VisADLsExport_v3' folder to Google Drive.")
+               "That folder will now open. Upload the whole 'VisADLsExport_v4' folder to Google Drive.")
         if problems:
             msg += f"\n\n{len(problems)} problem(s) were noted in export_log.txt."
         try:
