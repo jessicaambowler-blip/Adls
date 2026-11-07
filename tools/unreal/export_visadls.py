@@ -1,5 +1,5 @@
 """
-VisADLs export script – version 2.
+VisADLs export script – version 2.1 (no "overwrite?" questions).
 
 Exports the people, equipment and recorded movement from the original VisADLs Unreal Engine 5.5
 project (ADLs_Final) so they can be used in the VisADLs web app.
@@ -42,6 +42,7 @@ SCENES = [
 
 OUT_ROOT = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_saved_dir()), "VisADLsExport_v2")
 TEMP_PKG = "/Game/VisADLsExport_Temp"
+RUN_ID = __import__("time").strftime("%H%M%S")  # unique names each run, so nothing is overwritten
 
 log_lines = []
 report_lines = []
@@ -299,7 +300,10 @@ def bake_movement(world, seq, name, out_dir):
                 except Exception:
                     pass
                 try:
-                    anim = tools.create_asset(f"{name}_{label}_{i}", TEMP_PKG, unreal.AnimSequence, factory)
+                    asset_name = f"{name}_{label}_{i}_{RUN_ID}"
+                    if unreal.EditorAssetLibrary.does_asset_exist(f"{TEMP_PKG}/{asset_name}"):
+                        unreal.EditorAssetLibrary.delete_asset(f"{TEMP_PKG}/{asset_name}")
+                    anim = tools.create_asset(asset_name, TEMP_PKG, unreal.AnimSequence, factory)
                     opt = unreal.AnimSeqExportOption()
                     for attr, val in [("export_transforms", True), ("export_morph_targets", True), ("export_curves", True),
                                       ("record_in_world_space", False), ("evaluate_all_skeletal_mesh_components", True)]:
@@ -370,9 +374,20 @@ def finish_message():
     open_folder(OUT_ROOT)
 
 
+def clear_temp():
+    # Remove leftovers from earlier runs so Unreal does not ask about overwriting them.
+    try:
+        if unreal.EditorAssetLibrary.does_directory_exist(TEMP_PKG):
+            unreal.EditorAssetLibrary.delete_directory(TEMP_PKG)
+            log(f"Removed old temporary folder {TEMP_PKG}")
+    except Exception as e:
+        warn(f"could not remove {TEMP_PKG}: {e}")
+
+
 def main():
     os.makedirs(OUT_ROOT, exist_ok=True)
     log(f"Output folder: {OUT_ROOT}")
+    clear_temp()
     for name, map_path, seq_path in SCENES:
         out_dir = os.path.join(OUT_ROOT, name)
         os.makedirs(out_dir, exist_ok=True)
