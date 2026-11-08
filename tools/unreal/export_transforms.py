@@ -82,8 +82,24 @@ def all_bindings(seq):
     return out
 
 
+def find_sequences():
+    """Every Level Sequence in the project (so it works wherever they are)."""
+    reg = unreal.AssetRegistryHelpers.get_asset_registry()
+    try:
+        reg.wait_for_completion()
+    except Exception:
+        pass
+    assets = reg.get_assets_by_class(unreal.TopLevelAssetPath("/Script/LevelSequence", "LevelSequence"), True)
+    found = sorted(str(a.package_name) for a in assets if str(a.package_name).startswith("/Game/"))
+    return found
+
+
 def export(seq_path):
     seq = unreal.load_asset(seq_path)
+    if seq is None:
+        seq = unreal.EditorAssetLibrary.load_asset(seq_path)
+    if seq is None:
+        raise RuntimeError(f"could not load {seq_path}")
     tick = rate(seq.get_tick_resolution())
     result = {
         "sequence": seq_path,
@@ -148,7 +164,13 @@ def export(seq_path):
 
 
 os.makedirs(OUT, exist_ok=True)
-for p in SEQUENCES:
+log(f"Project: {unreal.Paths.get_project_file_path()}")
+found = find_sequences()
+log(f"Level Sequences in this project: {found}")
+targets = [p for p in found if p.split('/')[-1] in [x.split('/')[-1] for x in SEQUENCES]] or found
+if not found:
+    log("No Level Sequences found. Is ADLs_Final.uproject the project that is open?")
+for p in targets:
     try:
         export(p)
     except Exception:
