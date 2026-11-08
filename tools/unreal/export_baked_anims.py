@@ -61,7 +61,11 @@ def baked_animations():
     out = []
     for a in assets:
         p = str(a.package_name)
-        if not p.startswith("/Game/") or p.startswith("/Game/MetaHumans/") or p.startswith("/Game/VisADLsExport_Temp"):
+        if not p.startswith("/Game/") or p.startswith("/Game/VisADLsExport_Temp"):
+            continue
+        # The MetaHumans folder holds stock animations; keep only bakes saved there by mistake
+        # (Unreal's default bake name is "<skeleton>_Sequence<n>").
+        if p.startswith("/Game/MetaHumans/") and "_Sequence" not in p.split("/")[-1]:
             continue
         out.append(p)
     return sorted(out)
