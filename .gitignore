@@ -3,3 +3,5 @@ dist
 *.log
 .DS_Store
 .preview
+# Original VisADLs assets (MetaHumans, research participants' motion capture): not committed
+public/originals

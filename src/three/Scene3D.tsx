@@ -18,6 +18,7 @@ import { SUPPORT_PERSONA, applyPose, buildAvatar, type AvatarRig } from './avata
 import { buildItem } from './furniture';
 import { buildWalls, floorMaterial } from './walls';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
+import { OriginalActors } from './OriginalActors';
 
 const P = (x: number, y: number, h = 0) => new THREE.Vector3(x / 1000, h / 1000, y / 1000);
 
@@ -202,7 +203,7 @@ const Items = ({ layout, settings }: { layout: Layout; settings: ActivitySetting
   const sel = useStore((s) => s.selection);
   return (
     <>
-      {layout.items.map((it) =>
+      {layout.items.filter((it) => !it.hidden3d).map((it) =>
         it.kind === 'imported' ? (
           <ImportedItem key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} settings={settings} />
         ) : (
@@ -421,8 +422,9 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       <Floor layout={layout} />
       <Walls layout={layout} />
       <Items layout={layout} settings={settings} />
-      {settings.type !== 'imported' && <Actors built={built} settings={settings} live={live} />}
-      {settings.type !== 'imported' && <RouteOverlay built={built} settings={settings} />}
+      {settings.type === 'original' && <OriginalActors built={built} live={live as never} />}
+      {settings.type !== 'imported' && settings.type !== 'original' && <Actors built={built} settings={settings} live={live} />}
+      {settings.type !== 'imported' && settings.type !== 'original' && <RouteOverlay built={built} settings={settings} />}
       <Pins layoutKey={layoutKey} />
       <CameraRig layout={layout} built={built} live={live} />
       {hq && (

@@ -70,6 +70,8 @@ export interface Item {
   modelScale?: number;
   assetId?: string;
   color?: string;
+  /** shown on the plan only (the 3D model comes from an original VisADLs recording) */
+  hidden3d?: boolean;
 }
 
 export type FloorFinish = 'timber' | 'tiles' | 'vinyl' | 'carpet';
@@ -112,7 +114,8 @@ export type ActivityType =
   | 'bed-transfer'
   | 'toilet-transfer'
   | 'basin'
-  | 'imported';
+  | 'imported'
+  | 'original';
 
 export type ChairType = 'manual' | 'power';
 
@@ -135,6 +138,8 @@ export interface ActivitySettings {
   showSweptPath: boolean;
   /** imported item to drive with the timeline when type === 'imported' */
   importedItemId?: string;
+  /** which original VisADLs recording to play when type === 'original' */
+  originalId?: string;
 }
 
 export type NoteCategory = 'concern' | 'preference' | 'idea' | 'question' | 'decision';

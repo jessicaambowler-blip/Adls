@@ -4,6 +4,9 @@ import { CHAIRS, itemLabel } from '../model/catalogue';
 import { useStore } from '../model/store';
 import type { ActivityType, LayoutKey, PersonaSettings } from '../model/types';
 import { NumberField, Section, Segmented, Toggle } from './controls';
+import { ORIGINALS, getOriginal, loadOriginal, originalAvailable } from '../originals/originals';
+import { originalRoomTemplate } from '../model/templates';
+import { ask, notify } from './dialogs';
 
 const SKIN = ['#f1d2bd', '#e0b896', '#c99a7a', '#a8775a', '#7c5238', '#53382a'];
 const HAIR = ['#1f1a17', '#3b2a20', '#6b4a2e', '#a77b48', '#c9c2b8', '#8a3b22'];
@@ -52,6 +55,17 @@ export const ActivityPanel = () => {
   const imported = layout.items.filter((i) => i.kind === 'imported');
 
   const choose = (type: ActivityType) => { update({ type }); set({ time: 0, playing: false }); };
+  const replaceLayout = useStore((st) => st.replaceLayout);
+  const chooseOriginal = async (id: string) => {
+    const o = getOriginal(id) ?? (await loadOriginal(id));
+    if (!o) { notify('This recording could not be loaded.'); return; }
+    update({ type: 'original', originalId: id, chair: 'power' });
+    set({ time: 0, playing: false });
+    if (await ask(`This recording took place in its own room (with its original bed). Load that room into the ${active} layout? You can undo this.`, 'Load the original room')) {
+      replaceLayout(originalRoomTemplate(o.scene));
+      useStore.getState().selectCamera('overview');
+    }
+  };
   const needs = ACTIVITY_INFO[s.type].needs;
   const candidates = needs ? layout.items.filter((i) => needs.includes(i.kind)) : [];
 
@@ -59,7 +73,13 @@ export const ActivityPanel = () => {
     <div className="panel-body">
       <Section title="Choose an activity">
         <div className="activity-cards">
-          {(Object.keys(ACTIVITY_INFO) as ActivityType[]).filter((t) => t !== 'imported' || imported.length > 0).map((t) => (
+          {ORIGINALS.filter((r) => originalAvailable(r.id)).map((r) => (
+            <button key={r.id} className={`card original ${s.type === 'original' && s.originalId === r.id ? 'on' : ''}`} onClick={() => chooseOriginal(r.id)}>
+              <b>★ {r.title}</b>
+              <span>{r.blurb}</span>
+            </button>
+          ))}
+          {(Object.keys(ACTIVITY_INFO) as ActivityType[]).filter((t) => (t !== 'imported' || imported.length > 0) && t !== 'original').map((t) => (
             <button key={t} className={`card ${s.type === t ? 'on' : ''}`} onClick={() => choose(t)}>
               <b>{ACTIVITY_INFO[t].label}</b>
               <span>{ACTIVITY_INFO[t].blurb}</span>
@@ -89,7 +109,13 @@ export const ActivityPanel = () => {
         )}
       </Section>
 
-      {s.type !== 'imported' && (
+      {s.type === 'original' && (
+        <Section title="About this recording">
+          <p className="muted">This is real motion capture from the original VisADLs project, played on the MetaHuman used in the study. The person's movement, the hoist bar and the wheelchair's path are as recorded; the wheelchair is shown with the app's own powered-chair model. Skin and clothing colours are placeholders until the original textures are exported.</p>
+          <p className="caveat">A recording shows how one person performed this activity on one occasion. It is not a prediction of how anyone else would move.</p>
+        </Section>
+      )}
+      {s.type !== 'imported' && s.type !== 'original' && (
         <Section title="What the route shows">
           <RouteSummary built={builtActive} layoutKey={active} />
           {compare && <RouteSummary built={builtOther} layoutKey={active === 'existing' ? 'proposed' : 'existing'} />}

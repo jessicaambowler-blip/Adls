@@ -1,6 +1,7 @@
 import { CHAIRS } from '../model/catalogue';
 import { add, headingOf, itemToPlan, rotate } from '../model/geometry';
 import { chairFootprint, obstaclesOf, planRoute, sampleAt, type RouteResult } from '../model/pathfinding';
+import { getOriginal, sampleTrack, toPlan, ueYaw } from '../originals/originals';
 import { polygonsOverlap } from '../model/geometry';
 import type { ActivitySettings, ActivityType, Item, Layout, Vec2 } from '../model/types';
 import {
@@ -14,6 +15,7 @@ export const ACTIVITY_INFO: Record<ActivityType, { label: string; needs?: string
   'toilet-transfer': { label: 'Toilet transfer', needs: ['toilet'], blurb: 'Approach the toilet and side transfer onto the seat.' },
   basin: { label: 'Use the basin', needs: ['basin', 'vanity', 'kitchen-bench'], blurb: 'Forward approach to the basin and reach the tap.' },
   imported: { label: 'Imported animation', blurb: 'Plays the animation stored in an imported 3D model (e.g. original VisADLs motion capture).' },
+  original: { label: 'Original VisADLs recording', blurb: 'Real motion capture from the original VisADLs project, in the room where it was recorded.' },
 };
 
 export interface BodyState {
@@ -93,6 +95,50 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
   const type = settings.type;
 
   const drivePose = (d: number, moving: boolean) => (manual ? (moving ? pushPose((d / 650) % 1) : fullPose(SEATED)) : fullPose(POWER_DRIVE));
+
+  if (type === 'original') {
+    const o = getOriginal(settings.originalId);
+    if (!o) {
+      const still = { x: layout.start.x, y: layout.start.y, heading: layout.start.heading };
+      return {
+        type, duration: 1, phases: [{ t: 0, label: 'Loading recording…' }], problem: 'The original recording is still loading (or is not part of this copy of the app).',
+        chair: () => ({ ...still, wheelTurn: 0, moving: false }),
+        person: () => personInChair(still, settings.chair, fullPose(SEATED), scale),
+      };
+    }
+    const sc = o.scene;
+    const chairTrack = sc.props.find((p) => p.builtin)?.track;
+    let dist = 0;
+    let last: { x: number; y: number } | null = null;
+    // distance travelled, for wheel rotation (precomputed at 10 fps)
+    const travelled: number[] = [];
+    if (chairTrack) {
+      for (let f = 0; f < chairTrack.frames; f++) {
+        const p = toPlan(sc, chairTrack.data[f * 7], chairTrack.data[f * 7 + 1]);
+        if (last) dist += Math.hypot(p.x - last.x, p.y - last.y);
+        travelled.push(dist);
+        last = p;
+      }
+    }
+    const chairAt = (t: number): ChairState => {
+      if (!chairTrack) return { x: 0, y: 0, heading: 0, wheelTurn: 0, moving: false };
+      const s = sampleTrack(chairTrack, t);
+      const yaw = ueYaw(s.slice(3));
+      const fwd = { x: Math.cos((yaw * Math.PI) / 180), y: Math.sin((yaw * Math.PI) / 180) };
+      // the original chair's pivot sits ~10 cm behind the seat centre
+      const p = toPlan(sc, s[0] - fwd.x * 10, s[1] - fwd.y * 10);
+      const fi = Math.min(travelled.length - 1, Math.round(t * chairTrack.fps));
+      const moving = fi > 0 && Math.abs(travelled[fi] - travelled[Math.max(0, fi - 1)]) > 1;
+      return { x: p.x, y: p.y, heading: headingOf(fwd), wheelTurn: travelled[fi] ?? 0, moving };
+    };
+    const person = (t: number): BodyState => {
+      const s = sampleTrack(sc.person.track, t);
+      const p = toPlan(sc, s[0], s[1]);
+      const c = chairAt(t);
+      return { x: p.x, y: p.y, z: s[2] * 10, heading: c.heading, pitch: 0, pose: fullPose(SEATED) };
+    };
+    return { type, duration: sc.duration, phases: sc.phases, chair: chairAt, person };
+  }
 
   if (type === 'imported') {
     const still = { x: layout.start.x, y: layout.start.y, heading: layout.start.heading };

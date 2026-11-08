@@ -51,7 +51,7 @@ export const Timeline = () => {
           </div>
         </div>
         <span className="time">{fmtTime(time)} / {fmtTime(duration)}</span>
-        <Segmented label="Speed" value={String(speed)} onChange={(v) => set({ speed: +v })} options={[{ value: '0.5', label: '½×' }, { value: '1', label: '1×' }, { value: '2', label: '2×' }]} />
+        <Segmented label="Speed" value={String(speed)} onChange={(v) => set({ speed: +v })} options={[{ value: '0.5', label: '½×' }, { value: '1', label: '1×' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }]} />
       </div>
       <div className="tl-row cams">
         <span className="row-label">View</span>

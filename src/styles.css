@@ -231,6 +231,7 @@ svg.plan.crosshair { cursor: crosshair; }
 .activity-cards { display: flex; flex-direction: column; gap: 6px; }
 .card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; padding: 10px 12px; }
 .card span { font-size: 13px; color: var(--muted); }
+.card.original { border-color: #b08a2e; background: #fffaf0; }
 .card.on { background: var(--accent-soft); color: var(--ink); border: 2px solid var(--accent); }
 .card.on span { color: var(--ink); }
 .result { padding: 10px; border-radius: 8px; border-left: 5px solid #999; background: #f5f7f9; font-size: 14px; margin: 4px 0; }

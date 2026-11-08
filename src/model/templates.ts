@@ -1,6 +1,7 @@
 import { CATALOGUE } from './catalogue';
 import { uid } from './geometry';
 import type { Item, ItemKind, Layout, Opening, Project, Wall } from './types';
+import type { OriginalSceneData } from '../originals/originals';
 
 const T = 110; // typical internal stud wall thickness incl. plasterboard (mm)
 
@@ -179,3 +180,33 @@ export const defaultProject = (): Project => {
 
 /** Deep copy that KEEPS ids (so existing/proposed items can be compared). */
 export const cloneLayout = (l: Layout, name?: string): Layout => ({ ...JSON.parse(JSON.stringify(l)), name: name ?? l.name });
+
+/** The room an original VisADLs recording took place in (no walls in the original: an open floor). */
+export const originalRoomTemplate = (scene: OriginalSceneData): Layout => {
+  const [W, D] = scene.room;
+  const P = (X: number, Y: number) => ({ x: (X + scene.offsetCm[0]) * 10, y: (Y + scene.offsetCm[1]) * 10 });
+  const f = scene.bedFootprint;
+  // mattress & frame (the bounds also include the bedside tables, which are separate items)
+  const bedX0 = -65, bedX1 = 103, bedY0 = f.minY, bedY1 = f.maxY;
+  const c = P((bedX0 + bedX1) / 2, (bedY0 + bedY1) / 2);
+  const bed = makeItem('bed-queen', Math.round(c.x), Math.round(c.y), 180, {
+    w: Math.round((bedX1 - bedX0) * 10), d: Math.round((bedY1 - bedY0) * 10), h: 770, hidden3d: true, label: 'Original bed',
+  });
+  const t1 = P(134, 165), t2 = P(-96, 165);
+  const walls = rectWalls(W, D);
+  const start = P(scene.person.track.data[0], scene.person.track.data[1]);
+  return base(`Original room – ${scene.person.label}`, {
+    walls,
+    openings: [{ ...door(walls[2], W / 2, 1200), kind: 'opening' as const }],
+    items: [
+      bed,
+      makeItem('bedside-table', Math.round(t1.x), Math.round(t1.y), 180, { w: 500, d: 350, hidden3d: true, label: 'Bedside table' }),
+      makeItem('bedside-table', Math.round(t2.x), Math.round(t2.y), 180, { w: 500, d: 350, hidden3d: true, label: 'Bedside table' }),
+    ],
+    floor: 'vinyl',
+    wallColor: '#f1efe9',
+    start: { x: Math.round(start.x), y: Math.round(start.y), heading: 270 },
+    end: { x: Math.round(c.x), y: Math.round(c.y) },
+    targetItemId: bed.id,
+  });
+};

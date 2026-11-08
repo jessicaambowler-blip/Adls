@@ -11,6 +11,7 @@ import { RoomPanel } from './ui/RoomPanel';
 import { Help, Summary } from './ui/Summary';
 import { Timeline } from './ui/Timeline';
 import { Dialogs, HOSTED, ask, notify } from './ui/dialogs';
+import { loadOriginal, probeOriginals } from './originals/originals';
 
 const LABEL: Record<LayoutKey, string> = { existing: 'Existing home', proposed: 'Proposed changes' };
 
@@ -142,6 +143,11 @@ const Column = ({ k, mode, labelled }: { k: LayoutKey; mode: ViewMode; labelled:
 );
 
 export default function App() {
+  useEffect(() => {
+    probeOriginals();
+    const id = useStore.getState().project.activity.originalId;
+    if (useStore.getState().project.activity.type === 'original' && id) loadOriginal(id);
+  }, []);
   usePlayback();
   useKeyboard();
   const viewMode = useStore((s) => s.viewMode);
