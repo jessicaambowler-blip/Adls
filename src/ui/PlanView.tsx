@@ -9,7 +9,9 @@ import { chairFootprint } from '../model/pathfinding';
 import { useStore } from '../model/store';
 import { askValue } from './dialogs';
 import { toggleLabels } from './Timeline';
-import { runDetection } from './detectFlow';
+import { StopBanner } from './StopBanner';
+import { planPixels, runDetection } from './detectFlow';
+import { snapToPlan, type PlanPixels } from '../model/planSnap';
 import type { Item, Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
 import { addRoom, addWalls, applyWallDrag, beginWallDrag, moveCorner, snapPoint, splitAtJunctions, splitWall, tidyWalls, type WallDrag } from '../model/walls';
 
@@ -17,6 +19,8 @@ type Drag =
   | { kind: 'item'; id: string; offset: Vec2 }
   | { kind: 'wall'; id: string; start: Vec2; d: WallDrag; n: Vec2 }
   | { kind: 'corner'; at: Vec2; other?: Vec2 }
+  | { kind: 'label'; id: string; offset: Vec2 }
+  | { kind: 'plan'; start: Vec2; orig: Vec2 }
   | { kind: 'opening'; id: string }
   | { kind: 'start' | 'end'; offset: Vec2 }
   | { kind: 'pan'; start: Vec2; vb: VB; client: Vec2 }
@@ -142,7 +146,34 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const [room, setRoom] = useState<{ a: Vec2; b: Vec2 } | null>(null);
   const [typed, setTyped] = useState('');
   // the key handler reads these (state from its last render can be out of date between fast key presses)
-  const live = useRef({ draw: [] as Vec2[], typed: '', cursor: null as Vec2 | null });
+  const live = useRef({ draw: [] as Vec2[], typed: '', cursor: null as Vec2 | null, thick: [] as number[], cursorThick: 0 });
+  const space = useRef(false);
+  // the uploaded plan's pixels, for snapping to the walls drawn on it while tracing
+  const pix = useRef<PlanPixels | null>(null);
+  const bgNow = layout.background;
+  useEffect(() => {
+    pix.current = null;
+    if (!bgNow || (tool !== 'draw-wall' && tool !== 'add-room')) return;
+    let gone = false;
+    planPixels(bgNow).then((px) => { if (!gone) pix.current = px; }).catch(() => undefined);
+    return () => { gone = true; };
+  }, [bgNow?.dataUrl, bgNow?.scale, bgNow?.x, bgNow?.y, tool]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Snap for drawing: existing corners, then walls drawn on the uploaded plan, then existing walls / grid. */
+  const snapDrawPt = (p: Vec2, prev?: Vec2): { p: Vec2; plan: boolean; thick?: number } => {
+    const tol = vb.w / 70;
+    const s0 = snapPoint(layout, p, tol, prev);
+    if (s0.kind === 'corner' || !pix.current || !bgNow) return { p: s0.p, plan: false };
+    const ps = snapToPlan(pix.current, p, Math.max(tol, 150));
+    if (ps.x === undefined && ps.y === undefined) return { p: s0.p, plan: false };
+    let q = { x: Math.round(ps.x ?? p.x), y: Math.round(ps.y ?? p.y) };
+    if (prev) {
+      const d = sub(q, prev);
+      if (ps.x === undefined && Math.abs(d.x) < Math.abs(d.y) * 0.18) q = { x: prev.x, y: q.y };
+      else if (ps.y === undefined && Math.abs(d.y) < Math.abs(d.x) * 0.18) q = { x: q.x, y: prev.y };
+    }
+    return { p: q, plan: true, thick: ps.thickness };
+  };
   live.current.draw = draw; live.current.typed = typed; live.current.cursor = cursor;
   const detection = useStore((s) => (s.detection?.layoutKey === layoutKey ? s.detection : undefined));
   const detecting = useStore((s) => s.detecting);
@@ -197,6 +228,17 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     const p = toPlan(e);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     svgRef.current?.setPointerCapture(e.pointerId);
+    // pan with the middle or right button, or with the space bar held, whatever tool is active
+    if (e.button === 1 || e.button === 2 || space.current) {
+      e.preventDefault();
+      setDrag({ kind: 'pan', start: p, vb, client: { x: e.clientX, y: e.clientY } });
+      return;
+    }
+    if (tool === 'move-plan' && layout.background) {
+      checkpoint();
+      setDrag({ kind: 'plan', start: p, orig: { x: layout.background.x, y: layout.background.y } });
+      return;
+    }
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       pinch.current = { d: dist(a, b), vb };
@@ -209,7 +251,9 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     }
     if (tool === 'draw-wall') {
       const D = live.current.draw;
-      const q = snapPoint(layout, p, vb.w / 70, D[D.length - 1]).p;
+      const sn = snapDrawPt(p, D[D.length - 1]);
+      const q = sn.p;
+      if (sn.thick) live.current.thick.push(sn.thick);
       const last = D[D.length - 1];
       if (last && dist(q, last) < 20) { finishWalls(D); live.current.draw = []; return; }
       if (D.length >= 2 && dist(q, D[0]) < 20) { finishWalls([...D, D[0]]); live.current.draw = []; return; }
@@ -220,8 +264,19 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       return;
     }
     if (tool === 'add-room') {
-      const q = snapPoint(layout, p, vb.w / 70).p;
+      const q = snapDrawPt(p).p;
       setRoom({ a: q, b: q });
+      return;
+    }
+    if (tool === 'add-label') {
+      const at = { x: snap(p.x, 50), y: snap(p.y, 50) };
+      set({ tool: 'select' });
+      askValue('What is this room called?', 'Room name', '', 'Add name').then((text) => {
+        if (!text?.trim()) return;
+        const id = uid('label');
+        updateLayout((l) => { (l.labels ??= []).push({ id, text: text.trim(), ...at }); }, { key: layoutKey });
+        set({ selection: { type: 'label', id } });
+      });
       return;
     }
     if (tool === 'split-wall') {
@@ -294,7 +349,11 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 
   /** add the drawn walls to the layout (Enter, double-click, or clicking the last point again) */
   const finishWalls = (poly: Vec2[]) => {
-    if (poly.length >= 2) updateLayout((l) => { addWalls(l, poly); }, { key: layoutKey });
+    // walls traced over a plan take the thickness drawn on it
+    const th = live.current.thick.slice().sort((a, b) => a - b);
+    const thickness = th.length ? Math.max(70, Math.min(400, th[Math.floor(th.length / 2)])) : 110;
+    live.current.thick = [];
+    if (poly.length >= 2) updateLayout((l) => { addWalls(l, poly, thickness); }, { key: layoutKey });
     setDraw([]);
     setTyped('');
   };
@@ -311,12 +370,13 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       return;
     }
     if (area) { setArea({ ...area, b: p }); return; }
-    if (room) { setRoom({ ...room, b: snapPoint(layout, p, vb.w / 70, room.a).p }); return; }
+    if (room) { setRoom({ ...room, b: snapDrawPt(p).p }); return; }
     if (tool === 'draw-wall' || tool === 'add-room') {
       const L = live.current.draw;
-      const c = snapPoint(layout, p, vb.w / 70, L[L.length - 1]).p;
-      live.current.cursor = c;
-      setCursor(c);
+      const sn = snapDrawPt(p, L[L.length - 1]);
+      live.current.cursor = sn.p;
+      live.current.cursorThick = sn.plan ? sn.thick ?? 0 : -1;
+      setCursor(sn.p);
     }
     if (tool === 'split-wall') setCursor(p);
     if (tool === 'draw-room') setCursor(snapDraw(p));
@@ -353,6 +413,10 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     } else if (drag.kind === 'wall') {
       const amount = snap((p.x - drag.start.x) * drag.n.x + (p.y - drag.start.y) * drag.n.y);
       updateLayout((l) => { applyWallDrag(l, drag.d, amount); }, { commit: false, key: layoutKey });
+    } else if (drag.kind === 'plan') {
+      updateLayout((l) => { if (l.background) { l.background.x = Math.round(drag.orig.x + p.x - drag.start.x); l.background.y = Math.round(drag.orig.y + p.y - drag.start.y); } }, { commit: false, key: layoutKey });
+    } else if (drag.kind === 'label') {
+      updateLayout((l) => { const lb = l.labels?.find((x) => x.id === drag.id); if (lb) { lb.x = snap(p.x - drag.offset.x); lb.y = snap(p.y - drag.offset.y); } }, { commit: false, key: layoutKey });
     } else if (drag.kind === 'corner') {
       // square to the other end of the selected wall when close; 10 mm steps
       let q = { x: snap(p.x), y: snap(p.y) };
@@ -434,6 +498,14 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [set, tool]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const dn = (e: KeyboardEvent) => { if (e.code === 'Space' && (e.target as HTMLElement)?.tagName !== 'INPUT') space.current = true; };
+    const up = (e: KeyboardEvent) => { if (e.code === 'Space') space.current = false; };
+    window.addEventListener('keydown', dn);
+    window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', dn); window.removeEventListener('keyup', up); };
+  }, []);
 
   // leaving the wall tool keeps what was drawn
   useEffect(() => {
@@ -537,6 +609,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
+        onContextMenu={(e) => e.preventDefault()}
         role="application"
         aria-label="Floor plan editor. Drag furniture, walls and doors to change the layout."
       >
@@ -550,8 +623,8 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 
         {/* floor fill */}
         {layout.walls.length > 2 && (layout.walls.every((w, i) => dist(w.b, layout.walls[(i + 1) % layout.walls.length].a) < 2)
-          ? <polygon points={pts(layout.walls.map((w) => w.a))} className="floor-fill" pointerEvents="none" />
-          : (() => { const b = layoutBounds({ ...layout, items: [] }); return <rect x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} className="floor-fill" pointerEvents="none" />; })())}
+          ? <polygon points={pts(layout.walls.map((w) => w.a))} className={`floor-fill ${bg ? 'over-plan' : ''}`} pointerEvents="none" />
+          : (() => { const b = layoutBounds({ ...layout, items: [] }); return <rect x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} className={`floor-fill ${bg ? 'over-plan' : ''}`} pointerEvents="none" />; })())}
 
         {/* swept path */}
         {prints.map((p, i) => <polygon key={i} points={pts(p)} className="swept" pointerEvents="none" />)}
@@ -577,11 +650,19 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
             </g>
           );
         })}
-        {layout.items.map((it) => (it.kind === 'turning-space' || it.kind === 'grab-rail' || (!labels && !(selection?.type === 'item' && selection.id === it.id)) ? null : (
-          <text key={`l${it.id}`} x={it.x} y={it.y + fs * 0.35} fontSize={fs * (it.w < 600 || it.d < 500 ? 0.7 : 0.9)} className="item-label" pointerEvents="none">
-            {itemLabel(it.kind, it.label)}
-          </text>
-        )))}
+        {layout.items.map((it) => {
+          const sel = selection?.type === 'item' && selection.id === it.id;
+          if (it.kind === 'turning-space' || it.kind === 'grab-rail' || (!labels && !sel)) return null;
+          // names only where they fit inside the item (the selected item always shows its name)
+          const text = itemLabel(it.kind, it.label);
+          const across = Math.abs(Math.cos((it.rotation * Math.PI) / 180)) > 0.5 ? it.w : it.d;
+          let size = fs * 0.9;
+          if (text.length * size * 0.56 > across * 1.05) size = fs * 0.7;
+          if (text.length * size * 0.56 > across * 1.05 && !sel) return null;
+          return (
+            <text key={`l${it.id}`} x={it.x} y={it.y + size * 0.38} fontSize={size} className="item-label" pointerEvents="none">{text}</text>
+          );
+        })}
 
         {/* walls */}
         {wallRects.map((r, i) => <polygon key={i} points={pts(r)} className="wall-solid" pointerEvents="none" />)}
@@ -610,7 +691,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
                   setDrag({ kind: 'wall', id: piece.id, start: p, d: beginWallDrag(l, piece.id), n: wallNormal(piece) });
                 }}
               />
-              {(sel || (labels && L > fs * 9)) && (
+              {(sel || (labels && L > fs * 12)) && (
                 <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle" pointerEvents="none">
                   {Math.round(L - w.thickness)}
                 </text>
@@ -621,6 +702,21 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         {layout.openings.map((o) => {
           const w = layout.walls.find((x) => x.id === o.wallId);
           return w ? doorSymbol(o, w) : null;
+        })}
+
+        {/* room names */}
+        {(layout.labels ?? []).map((lb) => {
+          const sel = selection?.type === 'label' && selection.id === lb.id;
+          if (!labels && !sel) return null;
+          return (
+            <text
+              key={lb.id} x={lb.x} y={lb.y} fontSize={fs * 1.15} textAnchor="middle" className={`room-name ${sel ? 'selected' : ''}`}
+              onPointerDown={(e) => { if (tool !== 'select') return; set({ selection: { type: 'label', id: lb.id } }); startDrag(e, { kind: 'label', id: lb.id, offset: sub(toPlan(e), lb) }); }}
+              onDoubleClick={() => askValue('Rename', 'Name', lb.text, 'Rename').then((t) => { if (t !== null && t !== undefined) updateLayout((l) => { const x = l.labels?.find((q) => q.id === lb.id); if (x) x.text = t.trim() || x.text; }, { key: layoutKey }); })}
+            >
+              {lb.text}
+            </text>
+          );
         })}
 
         {/* corner handles of the selected wall */}
@@ -649,6 +745,14 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           );
         })}
 
+        {/* where the chair can't get past a wall */}
+        {built.stopped && (
+          <g pointerEvents="none" className="stop-mark">
+            <circle cx={built.stopped.at.x} cy={built.stopped.at.y} r={420} />
+            <line x1={built.stopped.at.x - 250} y1={built.stopped.at.y - 250} x2={built.stopped.at.x + 250} y2={built.stopped.at.y + 250} />
+            <line x1={built.stopped.at.x + 250} y1={built.stopped.at.y - 250} x2={built.stopped.at.x - 250} y2={built.stopped.at.y + 250} />
+          </g>
+        )}
         {/* contacts */}
         {route?.contacts.map((c, i) => <circle key={i} cx={c.at.x} cy={c.at.y} r={220} className="contact" pointerEvents="none" />)}
 
@@ -691,7 +795,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           <g pointerEvents="none">
             {draw.length > 0 && <polyline points={pts(cursor ? [...draw, cursor] : draw)} className="draw-line" />}
             {draw.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={fs * 0.4} className="draw-pt" />)}
-            {cursor && <circle cx={cursor.x} cy={cursor.y} r={fs * 0.35} className="snap-pt" />}
+            {cursor && <circle cx={cursor.x} cy={cursor.y} r={fs * 0.35} className={`snap-pt ${live.current.cursorThick >= 0 ? 'on-plan' : ''}`} />}
             {cursor && draw.length > 0 && (
               <text x={cursor.x + fs} y={cursor.y - fs} fontSize={fs} className="dim-label">
                 {typed ? `${typed} mm ⏎` : `${Math.round(dist(cursor, draw[draw.length - 1]))} mm`}
@@ -728,11 +832,16 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           </g>
         )}
         {tool === 'calibrate' && calib.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={fs * 0.5} className="draw-pt" />)}
-        {tool === 'calibrate' && calib.length === 1 && cursor && <line x1={calib[0].x} y1={calib[0].y} x2={cursor.x} y2={cursor.y} className="draw-line" />}
+        {tool === 'calibrate' && calib.length === 1 && cursor && (
+          <g pointerEvents="none">
+            <line x1={calib[0].x} y1={calib[0].y} x2={cursor.x} y2={cursor.y} className="draw-line" />
+            <text x={(cursor.x + calib[0].x) / 2} y={(cursor.y + calib[0].y) / 2 - fs * 0.8} fontSize={fs} textAnchor="middle" className="dim-label">{Math.round(dist(cursor, calib[0]))} mm at the current scale</text>
+          </g>
+        )}
       </svg>
 
       <div className="plan-edit-tools" role="toolbar" aria-label="Plan tools">
-        {([['select', 'Select', 'Select and move things', '↖'], ['draw-wall', 'Walls', 'Draw new walls', '✎'], ['add-room', 'Room', 'Add a room', '▭'], ['split-wall', 'Split', 'Split a wall so part of it can move', '✂']] as const).map(([t, label, title, icon]) => (
+        {([['select', 'Select', 'Select and move things', '↖'], ['draw-wall', 'Walls', 'Draw new walls', '✎'], ['add-room', 'Room', 'Add a room', '▭'], ['split-wall', 'Split', 'Split a wall so part of it can move', '✂'], ['add-label', 'Name', 'Write a room name on the plan', 'T']] as const).map(([t, label, title, icon]) => (
           <button key={t} className={tool === t ? 'on' : ''} onClick={() => set({ tool: t, selection: t === 'select' ? selection : null })} title={title} aria-label={title}>
             <span aria-hidden>{icon}</span> {label}
           </button>
@@ -751,15 +860,20 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         <div className="tool-banner">
           {tool === 'draw-room' && 'Click each corner of the room. Click the first corner again to finish. (Esc to cancel)'}
           {tool === 'draw-wall' && (draw.length === 0
-            ? 'Click where the wall starts – it snaps to corners and onto existing walls.'
-            : 'Click the next corner, or type a length in mm and press Enter. Double-click, Enter or Esc to finish.')}
+            ? (bgNow ? 'Click a corner of a wall on the plan – the green ring means it has found a wall drawn there.' : 'Click where the wall starts – it snaps to corners and onto existing walls.')
+            : 'Click the next corner, or type a length in mm and press Enter. Enter or Esc to finish. Right-drag or hold Space to move around.')}
+          {tool === 'move-plan' && 'Drag the plan to line it up. Choose Select when it is in place.'}
           {tool === 'add-room' && 'Drag from one corner of the new room to the opposite corner. Sides that run along existing walls join them.'}
           {tool === 'split-wall' && 'Click a wall where you want to cut it. Each piece can then be moved on its own.'}
-          {tool === 'calibrate' && 'Click two points on the plan whose real distance you know (e.g. the ends of a dimension line).'}
+          {tool === 'add-label' && 'Click where the room name should go.'}
+          {tool === 'calibrate' && (calib.length === 0
+            ? 'Set the scale, step 1 of 2: click one end of a measurement you know – e.g. the end of an overall dimension line. (Scroll to zoom, right-drag to move.)'
+            : 'Step 2 of 2: click the other end.')}
           {tool === 'pin-note' && 'Click on the plan where the note applies.'}
           {tool === 'detect-area' && !detecting && 'Drag a box around the floor you want to turn into 3D. (Esc to cancel)'}
         </div>
       )}
+      <StopBanner layoutKey={layoutKey} />
       <div className="plan-legend">
         <span><i className="lg route" /> route</span>
         {settings.showSweptPath && <span><i className="lg swept" /> space used by chair</span>}

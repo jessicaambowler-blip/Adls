@@ -20,6 +20,9 @@ import { buildWalls, floorMaterial } from './walls';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
 import { PersonaActors } from './PersonaActors';
+import { getOriginal, originalMissing } from '../originals/originals';
+import { P2_ID } from '../activities/activities';
+import { StopBanner } from '../ui/StopBanner';
 import { itemToPlan } from '../model/geometry';
 
 const P = (x: number, y: number, h = 0) => new THREE.Vector3(x / 1000, h / 1000, y / 1000);
@@ -291,6 +294,9 @@ const ActivityProps = ({ built }: { built: BuiltActivity }) => {
 const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: ActivitySettings }) => {
   const route = built.route;
   const labels = useStore((s) => s.showLabels);
+  // a contact's tag shows only around the moment the chair gets there (re-renders only when that changes)
+  const nearKey = useStore((s) => (route?.contacts ?? []).map((c, i) => (Math.abs(s.time - c.t) < 2.5 ? i : -1)).filter((i) => i >= 0).join(','));
+  const near = nearKey ? nearKey.split(',').map(Number) : [];
   const C = CHAIRS[settings.chair];
   const line = useMemo(() => (route ? route.samples.filter((_, i) => i % 3 === 0).map((s) => [s.x / 1000, 0.015, s.y / 1000] as [number, number, number]) : []), [route]);
   const prints = useMemo(() => {
@@ -310,13 +316,21 @@ const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: Act
     <group>
       <Line points={line} color="#1e88e5" lineWidth={3} dashed dashSize={0.12} gapSize={0.06} />
       {prints.map((p, i) => <Line key={i} points={p} color="#1e88e5" transparent opacity={0.22} lineWidth={1} />)}
+      {built.stopped && (
+        <group position={[built.stopped.at.x / 1000, 0.025, built.stopped.at.y / 1000]}>
+          <mesh rotation-x={-Math.PI / 2}>
+            <ringGeometry args={[0.35, 0.45, 48]} />
+            <meshBasicMaterial color="#b71c1c" />
+          </mesh>
+        </group>
+      )}
       {route.contacts.map((c, i) => (
         <group key={i} position={[c.at.x / 1000, 0.02, c.at.y / 1000]}>
           <mesh rotation-x={-Math.PI / 2}>
             <ringGeometry args={[0.22, 0.28, 40]} />
             <meshBasicMaterial color="#e53935" transparent opacity={0.85} />
           </mesh>
-          {labels && route.contacts.findIndex((x) => x.with === c.with) === i && (
+          {labels && near.includes(i) && (
             <Html center position={[0, 0.9, 0]} zIndexRange={[10, 0]}><div className="tag3d warn">Possible contact: {c.with}</div></Html>
           )}
         </group>
@@ -477,6 +491,14 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   );
 };
 
+/** While Persona 2's body and recording download (about 10 MB). */
+const PersonaLoading = () => {
+  const want = useStore((s) => s.project.activity.character === 'p2');
+  useStore((s) => s.assetVersion);
+  if (!want || getOriginal(P2_ID) || originalMissing(P2_ID)) return null;
+  return <div className="persona-loading" role="status">Loading Persona 2…</div>;
+};
+
 export const Scene3D = ({ layoutKey, label }: { layoutKey: LayoutKey; label?: string }) => {
   const hq = useStore((s) => s.highQuality);
   const clear = useStore((s) => s.set);
@@ -494,6 +516,8 @@ export const Scene3D = ({ layoutKey, label }: { layoutKey: LayoutKey; label?: st
         </Suspense>
       </Canvas>
       {label && <div className={`scene-label ${layoutKey}`}>{label}</div>}
+      <StopBanner layoutKey={layoutKey} />
+      <PersonaLoading />
     </div>
   );
 };

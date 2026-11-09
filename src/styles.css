@@ -79,10 +79,18 @@ input, select, textarea { font: inherit; border: 1px solid var(--line); border-r
 .pane-label.existing, .scene-label.existing { background: var(--existing); }
 .pane-label.proposed, .scene-label.proposed { background: var(--proposed); }
 
+/* tablets: side panel stays at the side (narrower); plan above 3D */
 @media (max-width: 1100px) {
-  .main { flex-direction: column-reverse; }
-  .sidebar { width: 100%; height: 42%; border-right: none; border-top: 1px solid var(--line); }
+  .sidebar { width: 290px; min-width: 260px; }
   .views.single .column.mode-split { flex-direction: column; }
+  .views.single .column.mode-split .plan-pane { flex: 1; }
+}
+/* phones: panel underneath */
+@media (max-width: 760px) {
+  .main { flex-direction: column-reverse; }
+  .sidebar { width: 100%; min-width: 0; height: 45%; border-right: none; border-top: 1px solid var(--line); }
+  .topbar { flex-wrap: wrap; gap: 6px; }
+  .topbar button { padding: 6px 9px; font-size: 13px; min-height: 36px; }
 }
 
 /* ---------- 3D */
@@ -298,3 +306,35 @@ button.wide { width: 100%; margin-bottom: 10px; }
 .tool-banner { top: auto; bottom: 40px; }
 .plan-tools .labels-toggle { font-size: 14px; }
 .plan-tools .labels-toggle.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.stop-banner { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: #b71c1c; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 14px; max-width: 86%; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.25); pointer-events: none; z-index: 3; }
+.scene3d .stop-banner { top: 44px; }
+.stop-mark circle { fill: rgba(183, 28, 28, 0.15); stroke: #b71c1c; stroke-width: 40; }
+.stop-mark line { stroke: #b71c1c; stroke-width: 60; stroke-linecap: round; }
+.room-name { fill: #6b7785; font-weight: 700; letter-spacing: 0.04em; cursor: move; paint-order: stroke; stroke: rgba(247, 244, 238, 0.9); stroke-width: 0.35em; user-select: none; }
+.room-name.selected { fill: #e67e00; }
+
+/* compact activity list: the chosen one opens to show its description and options */
+.activity-list { display: flex; flex-direction: column; gap: 4px; }
+.act { border: 1px solid var(--line, #dde2e6); border-radius: 10px; background: #fff; }
+.act.on { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.12); }
+.act-head { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 0; padding: 9px 12px; font-size: 15px; }
+.act-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #9aa5b1; flex: none; }
+.act.on .act-dot { border-color: var(--accent); background: radial-gradient(var(--accent) 45%, transparent 50%); }
+.act-tag { margin-left: auto; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+.act-tag.recorded { background: #fff3cd; color: #8a5a00; }
+.act-tag.demo { background: #e8eef5; color: #50606f; }
+.act-body { padding: 0 12px 12px 36px; }
+.act-body .muted { margin-top: 0; }
+.persona-loading { position: absolute; right: 12px; bottom: 12px; background: rgba(29, 39, 51, 0.85); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 14px; pointer-events: none; }
+.miniplan { width: 100%; max-height: 360px; background: #fbfcfd; border: 1px solid #ccc; }
+.snap-pt.on-plan { stroke: #12a150; stroke-width: 3px; }
+.plan-steps { list-style: none; counter-reset: st; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.plan-steps li { counter-increment: st; position: relative; padding: 8px 10px 10px 40px; border: 1px solid var(--line); border-radius: 10px; }
+.plan-steps li::before { content: counter(st); position: absolute; left: 10px; top: 8px; width: 22px; height: 22px; border-radius: 50%; background: #e8eef5; color: #50606f; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.plan-steps li.done::before { content: '✓'; background: #0f8a6b; color: #fff; }
+.plan-steps li.now { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.12); }
+.plan-steps li.now::before { background: var(--accent); color: #fff; }
+.plan-steps p { margin: 4px 0 8px; }
+button.linklike { background: none; border: none; color: var(--accent); padding: 4px 0; min-height: 0; text-decoration: underline; font-size: 13px; }
+.verify-flag { top: auto !important; bottom: 34px; left: 8px; right: auto; }
+.floor-fill.over-plan { fill-opacity: 0.35; }

@@ -113,6 +113,8 @@ const available = new Map<string, boolean>();
 
 export const getOriginal = (id?: string) => (id ? loaded.get(id) : undefined);
 export const originalAvailable = (id: string) => available.get(id) === true;
+/** this copy of the app definitely doesn't include the recording */
+export const originalMissing = (id: string) => available.get(id) === false;
 
 const inflate = async (buf: ArrayBuffer) =>
   new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();

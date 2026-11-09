@@ -9,7 +9,9 @@ export interface RouteResult {
   status: 'clear' | 'tight' | 'blocked';
   /** smallest gap (mm) between the chair's sides and an obstacle along the route (approximate) */
   minSideClearance: number;
-  contacts: { at: Vec2; with: string }[];
+  contacts: { at: Vec2; with: string; t: number }[];
+  /** where the chair first runs into a wall (it cannot get past), and the last moment before it */
+  stop?: { at: Vec2; t: number };
   duration: number;
 }
 
@@ -280,18 +282,24 @@ export const planRoute = (layout: Layout, req: RouteRequest): RouteResult => {
   const contacts: RouteResult['contacts'] = [];
   let minSide = Infinity;
   const lastBy = new Map<string, number>();
+  let stop: RouteResult['stop'];
+  let prevT = 0;
   for (const s of samples) {
     if (dist(s, req.goal) > Math.abs(approach) + 400 && dist(s, req.start) > 600) minSide = Math.min(minSide, grid.clearAt(s) - half);
     const fp = chairFootprint(s, req.chairWidth, req.chairLength);
     const hit = obstacles.find((o) => polygonsOverlap(fp, o.poly));
     if (hit && s.dist - (lastBy.get(hit.label) ?? -1e9) > 900) {
-      contacts.push({ at: { x: s.x, y: s.y }, with: hit.label });
+      contacts.push({ at: { x: s.x, y: s.y }, with: hit.label, t: s.t });
     }
     if (hit) lastBy.set(hit.label, s.dist);
+    // walls can't be moved out of the way: the chair stops before the first one it would hit
+    if (!stop && hit?.label === 'wall' && s.dist > 150) stop = { at: { x: s.x, y: s.y }, t: prevT };
+    prevT = s.t;
   }
   if (contacts.length && status === 'clear') status = 'tight';
 
-  return { samples, status, minSideClearance: Number.isFinite(minSide) ? Math.round(Math.max(-999, minSide)) : 999, contacts, duration: samples[samples.length - 1]?.t ?? 0 };
+  if (stop) status = 'blocked';
+  return { samples, status, minSideClearance: Number.isFinite(minSide) ? Math.round(Math.max(-999, minSide)) : 999, contacts, stop, duration: samples[samples.length - 1]?.t ?? 0 };
 };
 
 /** Chair footprint rectangle; origin is the chair's centre, front = heading direction. */

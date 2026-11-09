@@ -3,7 +3,8 @@ import { detectPlan } from '../model/detect';
 import { add, layoutBounds, layoutCentre, mul, uid, wallNormal, wallPoint } from '../model/geometry';
 import { exploreFrom } from '../model/pathfinding';
 import { useStore } from '../model/store';
-import type { LayoutKey, Opening, Vec2, Wall } from '../model/types';
+import type { Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
+import type { PlanPixels } from '../model/planSnap';
 import { notify } from './dialogs';
 
 const MAX_SIDE = 3400; // detection works on at most this many pixels per side (accuracy holds, memory stays low)
@@ -49,6 +50,27 @@ const loadGray = (src: string) =>
 
 const r10 = (v: number) => Math.round(v / 10) * 10;
 
+// The plan's pixels, read once per uploaded image (for snapping while tracing and for detection).
+const grayCache = new Map<string, Promise<{ gray: Uint8Array; W: number; H: number; factor: number }>>();
+const grayOf = (dataUrl: string) => {
+  let p = grayCache.get(dataUrl);
+  if (!p) { p = loadGray(dataUrl); grayCache.set(dataUrl, p); }
+  return p;
+};
+
+/** The background plan's pixels in plan millimetres (for snapping to its drawn walls). */
+export const planPixels = async (bg: NonNullable<Layout['background']>): Promise<PlanPixels> => {
+  const { gray, W, H, factor } = await grayOf(bg.dataUrl);
+  return { gray, W, H, k: bg.scale * factor, x0: bg.x, y0: bg.y };
+};
+
+/** Run detection over the whole uploaded plan. */
+export const detectWholePlan = (key: LayoutKey) => {
+  const bg = useStore.getState().project.layouts[key].background;
+  if (!bg) return;
+  return runDetection(key, { x: bg.x, y: bg.y }, { x: bg.x + bg.pxWidth * bg.scale, y: bg.y + bg.pxHeight * bg.scale });
+};
+
 /** Run wall detection inside a rectangle (plan mm) on the layout's background plan. */
 export const runDetection = async (key: LayoutKey, a: Vec2, b: Vec2) => {
   const st = useStore.getState();
@@ -56,7 +78,7 @@ export const runDetection = async (key: LayoutKey, a: Vec2, b: Vec2) => {
   if (!bg) return;
   st.set({ detecting: true });
   try {
-    const { gray, W, H, factor } = await loadGray(bg.dataUrl);
+    const { gray, W, H, factor } = await grayOf(bg.dataUrl);
     const k = bg.scale * factor; // mm per detection pixel
     const toPx = (p: Vec2) => ({ x: (p.x - bg.x) / k, y: (p.y - bg.y) / k });
     const pa = toPx(a), pb = toPx(b);
@@ -80,7 +102,7 @@ export const runDetection = async (key: LayoutKey, a: Vec2, b: Vec2) => {
     });
     if (walls.length < 3) {
       st.set({ detecting: false, tool: 'select' });
-      notify('Not enough walls were found in that area. Try drawing the box more tightly around one floor, or check the plan scale. You can always trace the walls with “Draw room outline”.');
+      notify('Not enough walls were found in that area. Check the plan’s scale, try a box around just one floor, or trace the walls by hand with the Walls tool – it snaps to the walls drawn on the plan.');
       return;
     }
     const counts = {

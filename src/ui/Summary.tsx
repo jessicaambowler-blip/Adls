@@ -2,7 +2,7 @@ import { ACTIVITY_INFO } from '../activities/activities';
 import { useActivity } from '../activities/useActivity';
 import { CHAIRS, itemLabel } from '../model/catalogue';
 import { diffLayouts, rectInfo } from '../model/edit';
-import { clearOpening } from '../model/geometry';
+import { clearOpening, itemCorners, layoutBounds, solidWallRects } from '../model/geometry';
 import { useStore } from '../model/store';
 import type { Layout, LayoutKey } from '../model/types';
 import { RouteSummary } from './ActivityPanel';
@@ -16,24 +16,41 @@ const LayoutFacts = ({ l }: { l: Layout }) => {
   return (
     <ul>
       {r && <li>Room inside size: {r.width} × {r.depth} mm</li>}
-      {doors.map((o) => <li key={o.id}>{o.kind === 'opening' ? 'Opening' : o.kind === 'sliding-door' ? 'Sliding door' : 'Door'} {o.width} mm (clear about {clearOpening(o)} mm)</li>)}
-      <li>Items: {l.items.map((i) => itemLabel(i.kind, i.label)).join(', ') || 'none'}</li>
+      {!!l.labels?.length && <li>Rooms: {l.labels.map((x) => x.text).join(', ')}</li>}
+      <li>Doorways: {doors.map((o) => `${o.width} mm (≈${clearOpening(o)} clear)`).join(', ') || 'none'}</li>
+      {l.items.length <= 10 && <li>Items: {l.items.map((i) => itemLabel(i.kind, i.label)).join(', ') || 'none'}</li>}
     </ul>
   );
 };
 
-const Shot = ({ k }: { k: LayoutKey }) => {
+/** A small drawing of a layout's walls, doors and furniture (used when there is no 3D picture of it). */
+const MiniPlan = ({ l, route }: { l: Layout; route?: { x: number; y: number }[] }) => {
+  const b = layoutBounds({ ...l, items: [] });
+  const pad = 300;
+  const vb = `${b.minX - pad} ${b.minY - pad} ${b.maxX - b.minX + 2 * pad} ${b.maxY - b.minY + 2 * pad}`;
+  const pts = (ps: { x: number; y: number }[]) => ps.map((q) => `${q.x},${q.y}`).join(' ');
+  return (
+    <svg className="shot miniplan" viewBox={vb} role="img" aria-label="Plan of the layout">
+      {l.items.filter((i) => i.kind !== 'rug' && i.kind !== 'turning-space').map((i) => <polygon key={i.id} points={pts(itemCorners(i))} fill="#e9e3d8" stroke="#8a8f99" strokeWidth={20} />)}
+      {solidWallRects(l).map((r, i) => <polygon key={i} points={pts(r)} fill="#39424e" />)}
+      {route && <polyline points={pts(route)} fill="none" stroke="#1e88e5" strokeWidth={50} strokeDasharray="120 80" />}
+      {(l.labels ?? []).map((lb) => <text key={lb.id} x={lb.x} y={lb.y} fontSize={260} textAnchor="middle" fill="#6b7785" fontWeight={700}>{lb.text}</text>)}
+    </svg>
+  );
+};
+
+const Shot = ({ k, l, route }: { k: LayoutKey; l: Layout; route?: { x: number; y: number }[] }) => {
   const canvases = document.querySelectorAll<HTMLCanvasElement>(`.scene3d canvas`);
-  // pick the canvas for this layout if two are showing, otherwise the only one
+  // the 3D picture of this layout if it is on screen, otherwise a plan drawing
   const labels = [...document.querySelectorAll('.scene3d')];
   const idx = labels.findIndex((el) => el.querySelector(`.scene-label.${k}`));
   const c = canvases[idx >= 0 ? idx : 0];
   const active = useStore.getState().activeLayout;
-  if (!c || (idx < 0 && active !== k)) return null;
+  if (!c || (idx < 0 && active !== k)) return <MiniPlan l={l} route={route} />;
   try {
     return <img className="shot" src={c.toDataURL('image/jpeg', 0.85)} alt={`3D view of the ${k} layout`} />;
   } catch {
-    return null;
+    return <MiniPlan l={l} route={route} />;
   }
 };
 
@@ -76,12 +93,16 @@ export const Summary = () => {
         <article id="summary-doc" className="summary-doc">
           <h1>{p.title}</h1>
           <p>{date}{p.consumerName && <> · Consumer: {p.consumerName}</>}{p.otName && <> · OT: {p.otName}</>}</p>
-          <p>Activity explored: <b>{ACTIVITY_INFO[p.activity.type].label}</b> with a {CHAIRS[p.activity.chair].label.toLowerCase()}{p.activity.supportPerson ? ' and a support person' : ''}.</p>
+          <p>
+            Activity explored: <b>{ACTIVITY_INFO[p.activity.type].label}</b>
+            {p.activity.character === 'p2' ? <> by Persona 2 from the original VisADLs project</> : null} with a {CHAIRS[p.activity.chair].label.toLowerCase()}
+            {p.activity.character === 'p2' && p.activity.type === 'bed-transfer' && p.activity.bedMethod !== 'side' ? <>, transferring with a ceiling hoist and a carer (recorded movement)</> : p.activity.supportPerson ? ' and a support person' : ''}.
+          </p>
 
           <h2>Existing and proposed layouts</h2>
           <div className="two-col">
-            <div><h3>Existing</h3><Shot k="existing" /><LayoutFacts l={p.layouts.existing} /><RouteSummary built={ex} layoutKey="existing" /></div>
-            <div><h3>Proposed</h3><Shot k="proposed" /><LayoutFacts l={p.layouts.proposed} /><RouteSummary built={pr} layoutKey="proposed" /></div>
+            <div><h3>Existing</h3><Shot k="existing" l={p.layouts.existing} route={ex.route?.samples.filter((_, i) => i % 5 === 0)} /><LayoutFacts l={p.layouts.existing} /><RouteSummary built={ex} layoutKey="existing" /></div>
+            <div><h3>Proposed</h3><Shot k="proposed" l={p.layouts.proposed} route={pr.route?.samples.filter((_, i) => i % 5 === 0)} /><LayoutFacts l={p.layouts.proposed} /><RouteSummary built={pr} layoutKey="proposed" /></div>
           </div>
 
           <h2>Changes being considered</h2>
@@ -106,8 +127,9 @@ export const Summary = () => {
           <p className="caveat">
             These visualisations were created to support a shared conversation between the consumer and their occupational therapist.
             They are not a clinical assessment, building certification or a guarantee that a modification will work.
-            Room measurements, door clear openings and equipment sizes must be checked on site. The movements shown are illustrative
-            and do not represent how every person with a spinal cord injury moves.
+            Room measurements, door clear openings and equipment sizes must be checked on site. Recorded movements (from the original
+            VisADLs motion capture) show how one person did an activity on one occasion; other movements are demonstrations made by the
+            app. Neither represents how every person with a spinal cord injury moves.
           </p>
         </article>
       </div>
@@ -122,7 +144,7 @@ export const Help = () => {
       <div className="modal-card">
         <h2>How to use VisADLs</h2>
         <ol className="help-steps">
-          <li><b>Room</b> – start from the demo house, a template, or an uploaded floor plan. The tools at the top of the plan: <b>Select</b> (drag furniture, doors, walls and wall corners), <b>Walls</b> (click corners to draw new walls; type a length and press Enter), <b>Room</b> (drag out a new room) and <b>Split</b> (cut a wall so just part of it can move). Moving a wall stretches the walls joined to it. Every number is in millimetres and can be typed in.</li>
+          <li><b>Room</b> – start from the demo house, a template, or a floor plan (upload it, click both ends of a printed measurement to set the scale, then let the app find the walls or trace them – the Walls tool snaps to walls drawn on the plan). Right-drag or hold Space to move around the plan while using any tool. The tools at the top of the plan: <b>Select</b> (drag furniture, doors, walls and wall corners), <b>Walls</b> (click corners to draw new walls; type a length and press Enter), <b>Room</b> (drag out a new room) and <b>Split</b> (cut a wall so just part of it can move). Moving a wall stretches the walls joined to it. Every number is in millimetres and can be typed in.</li>
           <li><b>Activity</b> – choose bed transfer, toilet transfer, using the basin or moving around. Press ▶ to watch. Drag the timeline to look at any moment.</li>
           <li><b>Views</b> – try “Seated eye level” to see from the wheelchair, or “From above” to see clearances.</li>
           <li><b>Existing / Proposed</b> – switch at the top. Make changes to “Proposed” and press “Compare” to see both side by side.</li>
@@ -132,7 +154,7 @@ export const Help = () => {
         <p>Space: play/pause · Arrow keys: nudge selected item (Shift = 100 mm) · R: rotate 90° · Delete: remove · Ctrl+Z / Ctrl+Y: undo / redo</p>
         <h3>Please remember</h3>
         {HOSTED && <p className="muted">You are using the online preview: your work is kept in this browser only. To keep a copy, use the installed version, which can save project files.</p>}
-        <p className="caveat">This is a research prototype for discussion. It does not check compliance with standards and is not a substitute for clinical reasoning or on-site measurement. The avatar and movements are placeholders until authentic VisADLs motion-capture assets are imported.</p>
+        <p className="caveat">This is a research prototype for discussion. It does not check compliance with standards and is not a substitute for clinical reasoning or on-site measurement. Persona 2's driving and hoist transfer are recorded VisADLs motion capture; other movements are demonstrations made by the app.</p>
         <div className="modal-actions"><button className="primary" onClick={() => set({ showHelp: false })}>Got it</button></div>
       </div>
     </div>

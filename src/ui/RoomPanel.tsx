@@ -9,7 +9,7 @@ import type { FloorFinish, Item, Opening } from '../model/types';
 import { loadModelFile } from '../three/assets';
 import { NumberField, Section, Segmented } from './controls';
 import { ask, notify } from './dialogs';
-import { acceptDetection } from './detectFlow';
+import { acceptDetection, detectWholePlan } from './detectFlow';
 
 const ReviewCard = () => {
   const d = useStore((s) => s.detection);
@@ -211,6 +211,22 @@ const WallInspector = ({ id }: { id: string }) => {
   );
 };
 
+const LabelInspector = ({ id }: { id: string }) => {
+  const layout = useStore((s) => s.layout());
+  const updateLayout = useStore((s) => s.updateLayout);
+  const set = useStore((s) => s.set);
+  const lb = layout.labels?.find((x) => x.id === id);
+  if (!lb) return null;
+  return (
+    <div className="inspector">
+      <h3>Room name</h3>
+      <label className="text">Name<input value={lb.text} onChange={(e) => updateLayout((l) => { const x = l.labels?.find((q) => q.id === id); if (x) x.text = e.target.value; })} /></label>
+      <p className="muted">Drag it on the plan to move it.</p>
+      <div className="btnrow"><button className="danger" onClick={() => { updateLayout((l) => { l.labels = l.labels?.filter((x) => x.id !== id); }); set({ selection: null }); }}>Remove name</button></div>
+    </div>
+  );
+};
+
 const MarkerInspector = ({ which }: { which: 'start' | 'end' }) => {
   const layout = useStore((s) => s.layout());
   const updateLayout = useStore((s) => s.updateLayout);
@@ -241,6 +257,8 @@ export const RoomPanel = () => {
   const planInput = useRef<HTMLInputElement>(null);
   const modelInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
+  const tool = useStore((s) => s.tool);
+  const detecting = useStore((s) => s.detecting);
   const [newW, setNewW] = useState(3600);
   const [newD, setNewD] = useState(3400);
   const rect = rectInfo(layout);
@@ -270,12 +288,22 @@ export const RoomPanel = () => {
 
   const onPlanFile = async (f?: File) => {
     if (!f) return;
+    // tracing a new plan is easiest on a clean sheet
+    const fresh = layout.walls.length > 0 && (await ask('Start this layout again from the plan? This clears the current walls, doors and furniture so you can trace or detect the plan cleanly. (Choose Cancel to lay the plan over what is there.) You can undo this.', 'Start from the plan'));
     setBusy('Reading floor plan…');
     try {
       const dataUrl = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') ? await pdfToImage(f) : await readAsDataUrl(f);
       const { w, h } = await imgSize(dataUrl);
-      const b = rect ? rect.width * 1.4 : 6000;
-      updateLayout((l) => { l.background = { dataUrl, pxWidth: w, pxHeight: h, scale: b / w, x: -b * 0.2, y: -b * 0.2 * (h / w), opacity: 0.55 }; });
+      // a first guess (a house about 14 m across) until the scale is set
+      const b = fresh || !layout.walls.length ? 14000 : (rect ? rect.width * 1.4 : 14000);
+      updateLayout((l) => {
+        if (fresh) { l.walls = []; l.openings = []; l.items = []; l.labels = []; l.targetItemId = undefined; l.unverified = false; }
+        l.background = { dataUrl, pxWidth: w, pxHeight: h, scale: b / w, x: 0, y: 0, opacity: 0.7 };
+        if (fresh || !l.walls.length) { l.start = { x: Math.round(b / 2), y: Math.round((b * h) / w + 900), heading: 180 }; l.end = { x: Math.round(b / 2), y: Math.round((b * h) / w / 2) }; }
+      });
+      if (fresh && useStore.getState().project.activity.type !== 'navigate') updateActivity({ type: 'navigate' });
+      // straight on to setting the scale
+      set({ tool: 'calibrate', selection: null, viewMode: 'plan' });
     } catch (e) {
       notify(`That file could not be read (${(e as Error).message}). Try a PNG, JPG or PDF.`);
     }
@@ -316,6 +344,7 @@ export const RoomPanel = () => {
       {selItem && <ItemInspector it={selItem} />}
       {selOpening && <OpeningInspector o={selOpening} />}
       {selection?.type === 'wall' && <WallInspector id={selection.id} />}
+      {selection?.type === 'label' && <LabelInspector id={selection.id} />}
       {(selection?.type === 'start' || selection?.type === 'end') && <MarkerInspector which={selection.type} />}
       {!selection && <p className="hint big">Click anything on the plan (or in 3D) to change it. Editing: <b className={`lk ${active}`}>{active === 'existing' ? 'Existing home' : 'Proposed changes'}</b></p>}
 
@@ -334,24 +363,45 @@ export const RoomPanel = () => {
         </div>
       </Section>
 
-      <Section title="2. Use an existing floor plan" open={!selection}>
-        <p className="muted">Upload a plan (image or PDF). Set its scale by clicking two points a known distance apart, then let the app find the walls, doors and windows, or trace them yourself. Automatic results are a starting point and must be checked.</p>
+      <Section title="2. Use a floor plan" open={!selection}>
         <input ref={planInput} type="file" accept="image/*,.pdf" hidden onChange={(e) => { onPlanFile(e.target.files?.[0]); e.target.value = ''; }} />
-        <div className="btnrow">
-          <button onClick={() => planInput.current?.click()}>Upload floor plan…</button>
-          {layout.background && <button className={layout.background.calibrated ? '' : 'primary'} onClick={() => set({ tool: 'calibrate', selection: null })}>{layout.background.calibrated ? 'Scale set ✓ – change' : 'Set scale'}</button>}
-          {layout.background && (
-            <button className={layout.background.calibrated ? 'primary' : ''} onClick={async () => {
-              if (!layout.background?.calibrated && !(await ask('The plan’s scale has not been set yet, so detected sizes will be wrong. Find walls anyway?', 'Find walls anyway'))) return;
-              set({ tool: 'detect-area', selection: null, detection: undefined });
-            }}>Find walls automatically</button>
-          )}
-          {layout.background && <button className="danger" onClick={() => updateLayout((l) => { l.background = undefined; })}>Remove plan</button>}
-        </div>
-        {layout.background && (
-          <label className="slider">Plan visibility
-            <input type="range" min={0.1} max={1} step={0.05} value={layout.background.opacity} onChange={(e) => updateLayout((l) => { if (l.background) l.background.opacity = +e.target.value; }, { commit: false })} />
-          </label>
+        {!layout.background ? (
+          <>
+            <p className="muted">Upload a plan (photo, scan, image or PDF) and build the walls from it in three steps: upload, set the scale, then let the app find the walls or trace them yourself.</p>
+            <button className="primary wide" onClick={() => planInput.current?.click()}>Upload a floor plan…</button>
+          </>
+        ) : (
+          <ol className="plan-steps">
+            <li className="done">
+              <b>Plan uploaded</b>
+              <div className="btnrow">
+                <button onClick={() => planInput.current?.click()}>Replace…</button>
+                <button className={tool === 'move-plan' ? 'on' : ''} onClick={() => set({ tool: tool === 'move-plan' ? 'select' : 'move-plan', selection: null })}>{tool === 'move-plan' ? 'Done moving' : 'Move plan'}</button>
+                <button className="danger" onClick={() => updateLayout((l) => { l.background = undefined; })}>Remove</button>
+              </div>
+              <label className="slider">Plan visibility
+                <input type="range" min={0.1} max={1} step={0.05} value={layout.background.opacity} onChange={(e) => updateLayout((l) => { if (l.background) l.background.opacity = +e.target.value; }, { commit: false })} />
+              </label>
+            </li>
+            <li className={layout.background.calibrated ? 'done' : 'now'}>
+              <b>Set the scale</b>
+              <p className="muted">{layout.background.calibrated ? 'Done. Sizes on the plan are in real millimetres.' : 'Click both ends of a measurement printed on the plan (an overall length is best), then type what it says.'}</p>
+              <button className={layout.background.calibrated ? '' : 'primary'} onClick={() => set({ tool: 'calibrate', selection: null })}>{layout.background.calibrated ? 'Set the scale again' : 'Set the scale'}</button>
+            </li>
+            <li className={layout.background.calibrated ? 'now' : ''}>
+              <b>Make the walls</b>
+              <p className="muted">Let the app find them (check the result), or trace them: the Walls tool snaps to walls drawn on the plan and picks up their thickness.</p>
+              <div className="btnrow">
+                <button className={layout.background.calibrated ? 'primary' : ''} disabled={detecting} onClick={async () => {
+                  if (!layout.background?.calibrated && !(await ask('The scale has not been set yet, so the sizes found will be wrong. Find walls anyway?', 'Find walls anyway'))) return;
+                  set({ selection: null, detection: undefined });
+                  detectWholePlan(active);
+                }}>{detecting ? 'Finding walls…' : 'Find walls automatically'}</button>
+                <button onClick={() => set({ tool: 'draw-wall', selection: null })}>✎ Trace walls</button>
+              </div>
+              <button className="linklike" onClick={() => set({ tool: 'detect-area', selection: null, detection: undefined })}>Find walls in part of the plan only…</button>
+            </li>
+          </ol>
         )}
       </Section>
 

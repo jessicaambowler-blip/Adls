@@ -92,9 +92,14 @@ export interface PlanBackground {
   pxHeight: number;
 }
 
+/** A name written on the plan, e.g. a room name. */
+export interface PlanLabel { id: string; text: string; x: number; y: number }
+
 export interface Layout {
   name: string;
   walls: Wall[];
+  /** room names and other notes written on the plan */
+  labels?: PlanLabel[];
   openings: Opening[];
   items: Item[];
   floor: FloorFinish;

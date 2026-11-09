@@ -57,6 +57,11 @@ const useKeyboard = () => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo(); return; }
       if (e.key === ' ') { e.preventDefault(); s.set({ playing: !s.playing, time: !s.playing && s.time >= s.duration ? 0 : s.time }); return; }
       const sel = s.selection;
+      if (sel?.type === 'label' && (e.key === 'Delete' || e.key === 'Backspace')) {
+        s.updateLayout((l) => { l.labels = l.labels?.filter((x) => x.id !== sel.id); });
+        s.set({ selection: null });
+        return;
+      }
       if (sel?.type === 'wall') {
         const w = s.layout().walls.find((x) => x.id === sel.id);
         if (!w) return;
@@ -131,7 +136,12 @@ const TopBar = () => {
         <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { open(e.target.files?.[0]); e.target.value = ''; }} />
         <button onClick={() => fileRef.current?.click()}>Open</button>
         {!HOSTED && <button onClick={save}>Save</button>}
-        <button className="primary" onClick={() => s.set({ showSummary: true, playing: false })}>Summary</button>
+        <button className="primary" onClick={() => {
+          // a consistent picture: overview camera, then open once it has drawn
+          s.set({ playing: false });
+          s.selectCamera('overview');
+          setTimeout(() => useStore.getState().set({ showSummary: true }), 700);
+        }}>Summary</button>
         <button onClick={() => s.set({ showHelp: true })} aria-label="Help">?</button>
       </div>
     </header>

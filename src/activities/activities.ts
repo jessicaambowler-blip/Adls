@@ -1,5 +1,5 @@
 import { CHAIRS } from '../model/catalogue';
-import { add, headingOf, itemToPlan, rotate } from '../model/geometry';
+import { add, clearOpening, dist, headingOf, itemToPlan, rotate, wallPoint } from '../model/geometry';
 import { chairFootprint, obstaclesOf, planRoute, sampleAt, type RouteResult } from '../model/pathfinding';
 import { fitPoint, fitToBed, fitWeight, getOriginal, sampleTrack, toPlan, ueYaw, type BedFit, type OriginalSceneData } from '../originals/originals';
 import { polygonsOverlap } from '../model/geometry';
@@ -66,6 +66,8 @@ export interface BuiltActivity {
   mh?: { person: (t: number) => Mix; carer?: (t: number) => Mix; hoist?: (t: number) => Mix; mirrored?: boolean; recorded?: boolean };
   /** things that move during the activity (cupboard doors) */
   props?: ActivityProp[];
+  /** the chair could not get past a wall: where and when it stopped */
+  stopped?: { at: Vec2; t: number; where: string };
 }
 
 const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -128,6 +130,20 @@ export const recordedChair = (sc: OriginalSceneData) => {
     const moving = fi > 0 && Math.abs(travelled[fi] - travelled[Math.max(0, fi - 1)]) > 1;
     return { x: p.x, y: p.y, heading: headingOf(fwd), wheelTurn: travelled[fi] ?? 0, moving };
   };
+};
+
+/** Plain description of where a chair got stuck: the nearest doorway, else "a wall". */
+const describeStop = (layout: Layout, at: Vec2) => {
+  let best: { d: number; text: string } | null = null;
+  for (const o of layout.openings) {
+    if (o.kind === 'window') continue;
+    const w = layout.walls.find((x) => x.id === o.wallId);
+    if (!w) continue;
+    const d = dist(wallPoint(w, o.offset), at);
+    const name = o.kind === 'opening' ? 'opening' : o.kind === 'sliding-door' ? 'sliding door' : 'door';
+    if (d < 1200 && (!best || d < best.d)) best = { d, text: `the ${o.width} mm ${name} (about ${clearOpening(o)} mm clear)` };
+  }
+  return best?.text ?? 'a wall';
 };
 
 const toLocal = (F: Frame2, p: Frame2): Frame2 => ({ ...rotate({ x: p.x - F.x, y: p.y - F.y }, -F.h), h: p.h - F.h });
@@ -310,9 +326,10 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
   if (park) goal = park;
   route ??= routeTo(goal);
 
-  const T0 = route.duration;
+  // if a wall is in the way the chair stops just before it (and the activity ends there)
+  const T0 = route.stop?.t ?? route.duration;
   const chairAt = (t: number): ChairState => {
-    const p = sampleAt(route.samples, t);
+    const p = sampleAt(route.samples, Math.min(t, T0));
     return { x: p.x, y: p.y, heading: p.heading, wheelTurn: p.dist, moving: t > 0 && t < T0 };
   };
   const parked = chairAt(T0);
@@ -340,6 +357,22 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
   // ... then easing into the app's poses for the activity itself
   const p2Mix = (t: number): Mix => (t < T0 ? { a: seatedLoop(t), w: 0 } : { a: seatedLoop(T0), b: { kind: 'pose' }, w: ease((t - T0) / 0.8) });
 
+  if (route.stop) {
+    const stop = route.stop;
+    const where = describeStop(layout, stop.at);
+    const duration = T0 + 3;
+    // show the route only as far as it gets
+    const shown: RouteResult = { ...route, samples: route.samples.filter((x) => x.t <= T0 + 0.6), contacts: route.contacts.filter((c) => c.t <= T0 + 0.6), duration: T0 };
+    return {
+      type, duration, route: shown, target,
+      phases: [{ t: 0, label: 'Approach' }, { t: T0, label: 'Can’t get past' }],
+      problem: `The ${C.label.toLowerCase()} (${C.width} mm wide, ${C.length} mm long) can’t get past ${where}, so the activity stops there.`,
+      stopped: { at: stop.at, t: T0, where },
+      chair: chairAt, person: personTravel, helper: settings.supportPerson ? helperFollow : undefined,
+      mh: p2 ? { person: (t) => ({ a: seatedLoop(t), w: 0 }) } : undefined,
+    };
+  }
+
   if (!target || type === 'navigate') {
     const duration = T0 + 1.5;
     return {
@@ -355,7 +388,17 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
     const f = rec.scene.bedFit!;
     const lift = target.h - f.topCm * 10;
     const tB = T0 + 1;
-    const tau = (t: number) => Math.min(HOIST_TO, Math.max(HOIST_FROM, HOIST_FROM + (t - tB)));
+    // the quiet parts of the recording play faster (and the timeline says so): getting ready ×2,
+    // the lift itself at real speed, settling on the bed ×3
+    const R1 = 2, R3 = 3;
+    const d1 = (HOIST_LIFT - HOIST_FROM) / R1, d2 = HOIST_DOWN - HOIST_LIFT, d3 = (HOIST_TO - HOIST_DOWN) / R3;
+    const tau = (t: number) => {
+      const u = t - tB;
+      if (u <= 0) return HOIST_FROM;
+      if (u < d1) return HOIST_FROM + u * R1;
+      if (u < d1 + d2) return HOIST_LIFT + (u - d1);
+      return Math.min(HOIST_TO, HOIST_DOWN + (u - d1 - d2) * R3);
+    };
     const liftAt = (tau: number) => lift * ease((tau - HOIST_LIFT) / (HOIST_DOWN - HOIST_LIFT));
     const bedAnchor = (tau: number, withLift: boolean): Anchor => ({ from: hf.F0, to: hf.F1, lift: withLift ? liftAt(tau) : 0, mirror: hf.mirror });
     const clip = (t: number): Src => ({ kind: 'clip', tau: tau(t), anchor: bedAnchor(tau(t), true) });
@@ -369,12 +412,12 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
     };
     const phases2: Phase[] = [
       { t: 0, label: 'Drive to the bed' },
-      { t: T0, label: 'Ready beside the bed' },
-      { t: tB + (HOIST_LIFT - HOIST_FROM), label: 'Hoist lift (recorded)' },
-      { t: tB + (HOIST_DOWN - HOIST_FROM), label: 'Lowered onto the bed' },
+      { t: T0, label: 'Ready (2× speed)' },
+      { t: tB + d1, label: 'Hoist lift (real speed)' },
+      { t: tB + d1 + d2, label: 'On the bed (3× speed)' },
     ];
     return {
-      type, duration: tB + (HOIST_TO - HOIST_FROM) + 2, route, phases: phases2, target, problem, side: s > 0 ? 'right' : 'left',
+      type, duration: tB + d1 + d2 + d3 + 2, route, phases: phases2, target, problem, side: s > 0 ? 'right' : 'left',
       parking: { x: parked.x, y: parked.y, heading: parked.heading },
       chair: (t) => (t < T0 ? chairAt(t) : { ...parked, moving: false }),
       person,

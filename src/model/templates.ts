@@ -239,6 +239,8 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     items,
     floor: 'timber',
     wallColor: '#efebe4',
+    labels: ([['Bedroom 1', 1700, 3550], ['Bathroom', 5500, 3550], ['Bedroom 2', 9000, 3200], ['Hallway', 7300, 4550], ['Living', 1500, 5800], ['Kitchen & dining', 8000, 5750]] as const)
+      .map(([text, x, y]) => ({ id: uid('label'), text, x, y })),
     start: { x: 3700, y: 8700, heading: 180 },
     end: { x: 8300, y: 6800 },
     targetItemId: bed.id,

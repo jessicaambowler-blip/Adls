@@ -6,6 +6,7 @@ export type Selection =
   | { type: 'item'; id: string }
   | { type: 'wall'; id: string }
   | { type: 'opening'; id: string }
+  | { type: 'label'; id: string }
   | { type: 'start' }
   | { type: 'end' }
   | null;
@@ -13,7 +14,7 @@ export type Selection =
 export type CameraPreset = 'overview' | 'top' | 'seated' | 'support' | 'follow' | 'closeup';
 export type ViewMode = 'split' | '3d' | 'plan';
 export type WallMode = 'cutaway' | 'full' | 'low';
-export type Tool = 'select' | 'draw-room' | 'draw-wall' | 'add-room' | 'split-wall' | 'calibrate' | 'pin-note' | 'detect-area';
+export type Tool = 'select' | 'draw-room' | 'draw-wall' | 'add-room' | 'split-wall' | 'add-label' | 'move-plan' | 'calibrate' | 'pin-note' | 'detect-area';
 
 /** Walls/openings proposed by automatic detection, waiting for review (plan mm). */
 export interface DetectionProposal {
@@ -95,7 +96,7 @@ export const useStore = create<State>((set, get) => ({
   assetVersion: 0,
   activeLayout: 'existing',
   selection: null,
-  viewMode: 'split',
+  viewMode: typeof window !== 'undefined' && window.innerWidth < 1200 ? '3d' : 'split',
   compare: false,
   camera: 'overview',
   cameraNonce: 0,

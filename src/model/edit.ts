@@ -1,5 +1,5 @@
 import { catalogueEntry, itemLabel } from './catalogue';
-import { add, clearOpening, dist, layoutBounds } from './geometry';
+import { add, clearOpening, dist, layoutBounds, wallPoint } from './geometry';
 import type { Layout, Vec2 } from './types';
 
 /** Move one wall by a vector, dragging any connected wall endpoints with it. */
@@ -49,27 +49,70 @@ export const diffLayouts = (a: Layout, b: Layout): Change[] => {
     if (!wa) continue;
     if (!ra && (dist(wa.a, wb.a) > 5 || dist(wa.b, wb.b) > 5)) out.push({ what: 'Wall moved', detail: `by about ${Math.round(Math.max(dist(wa.a, wb.a), dist(wa.b, wb.b)))} mm` });
   }
+  // doors and windows: by id, else the nearest one in the other layout (within 1.2 m)
+  const centre = (l: Layout, o: Layout['openings'][number]) => { const w = l.walls.find((x) => x.id === o.wallId); return w ? wallPoint(w, o.offset) : null; };
+  const usedO = new Set<string>();
+  const kindName0 = (k: string) => (k === 'window' ? 'Window' : k === 'opening' ? 'Opening' : k === 'sliding-door' ? 'Sliding door' : 'Door');
+  // "Bedroom 1 door": named after the nearest room name on the plan
+  const roomNear = (p: { x: number; y: number } | null) => {
+    if (!p) return '';
+    // a door between a room and the hallway is the room's door
+    let best = '', bd = 3500;
+    for (const lb of b.labels ?? a.labels ?? []) {
+      const d = dist(lb, p) + (/hall/i.test(lb.text) ? 2500 : 0);
+      if (d < bd) { bd = d; best = lb.text; }
+    }
+    return best;
+  };
+  let here = '';
+  const kindName = (k: string) => (here ? `${here} ${kindName0(k).toLowerCase()}` : kindName0(k));
   for (const ob of b.openings) {
-    const oa = a.openings.find((o) => o.id === ob.id);
-    const name = ob.kind === 'window' ? 'Window' : ob.kind === 'opening' ? 'Opening' : 'Door';
+    here = roomNear(centre(b, ob));
+    let oa = a.openings.find((o) => o.id === ob.id);
+    const cb = centre(b, ob);
+    if (!oa && cb) {
+      let bd = 1200;
+      for (const o of a.openings) {
+        if (usedO.has(o.id) || (o.kind === 'window') !== (ob.kind === 'window')) continue;
+        const ca = centre(a, o);
+        if (ca && dist(ca, cb) < bd) { bd = dist(ca, cb); oa = o; }
+      }
+    }
+    const name = kindName(ob.kind);
     if (!oa) { out.push({ what: `${name} added`, detail: `${ob.width} mm wide` }); continue; }
-    if (oa.width !== ob.width) out.push({ what: `${name} width`, detail: `${oa.width} → ${ob.width} mm (clear opening about ${clearOpening(oa)} → ${clearOpening(ob)} mm)` });
-    if (oa.kind !== ob.kind) out.push({ what: `${name} type`, detail: `${oa.kind} → ${ob.kind}` });
-    if (Math.abs(oa.offset - ob.offset) > 5) out.push({ what: `${name} moved`, detail: `${Math.round(Math.abs(oa.offset - ob.offset))} mm along the wall` });
-    if (oa.swingSide !== ob.swingSide || oa.hinge !== ob.hinge) out.push({ what: `${name} swing`, detail: 'Hinge side or swing direction changed' });
+    usedO.add(oa.id);
+    if (oa.width !== ob.width) out.push({ what: `${kindName(oa.kind)} width`, detail: `${oa.width} → ${ob.width} mm (clear opening about ${clearOpening(oa)} → ${clearOpening(ob)} mm)` });
+    if (oa.kind !== ob.kind) out.push({ what: `${kindName(oa.kind)} type`, detail: `${kindName0(oa.kind).toLowerCase()} → ${kindName0(ob.kind).toLowerCase()}` });
+    const ca = centre(a, oa);
+    if (ca && cb && dist(ca, cb) > 5) out.push({ what: `${name} moved`, detail: `about ${Math.round(dist(ca, cb))} mm` });
+    if (oa.kind === ob.kind && (oa.swingSide !== ob.swingSide || oa.hinge !== ob.hinge)) out.push({ what: `${name} swing`, detail: 'Hinge side or swing direction changed' });
   }
-  for (const oa of a.openings) if (!b.openings.find((o) => o.id === oa.id)) out.push({ what: 'Opening removed', detail: `${oa.width} mm ${oa.kind}` });
+  for (const oa of a.openings) if (!usedO.has(oa.id) && !b.openings.some((o) => o.id === oa.id)) { here = roomNear(centre(a, oa)); out.push({ what: `${kindName(oa.kind)} removed`, detail: `${oa.width} mm` }); }
+  // items: the same item (by id), else the nearest unmatched one of the same kind (layouts built
+  // separately, e.g. the demo house, don't share ids)
+  const used = new Set<string>();
+  const matchItem = (ib: (typeof b.items)[number]) => {
+    const byId = a.items.find((i) => i.id === ib.id);
+    if (byId) return byId;
+    let best: (typeof a.items)[number] | undefined;
+    for (const ia of a.items) {
+      if (ia.kind !== ib.kind || used.has(ia.id) || b.items.some((x) => x.id === ia.id)) continue;
+      if (dist(ia, ib) < 1500 && (!best || dist(ia, ib) < dist(best, ib))) best = ia;
+    }
+    return best;
+  };
   for (const ib of b.items) {
-    const ia = a.items.find((i) => i.id === ib.id);
+    const ia = matchItem(ib);
     const name = itemLabel(ib.kind, ib.label);
     if (!ia) { out.push({ what: `${name} added`, detail: `${ib.w} × ${ib.d} mm` }); continue; }
+    used.add(ia.id);
     const moved = dist(ia, ib);
     if (moved > 5) out.push({ what: `${name} moved`, detail: `${Math.round(moved)} mm` });
     if (ia.rotation !== ib.rotation) out.push({ what: `${name} rotated`, detail: `${ia.rotation}° → ${ib.rotation}°` });
     if (ia.w !== ib.w || ia.d !== ib.d || ia.h !== ib.h) out.push({ what: `${name} resized`, detail: `${ia.w}×${ia.d}×${ia.h} → ${ib.w}×${ib.d}×${ib.h} mm` });
     if ((ia.elevation ?? 0) !== (ib.elevation ?? 0)) out.push({ what: `${name} height`, detail: `${ia.elevation ?? 0} → ${ib.elevation ?? 0} mm above floor` });
   }
-  for (const ia of a.items) if (!b.items.find((i) => i.id === ia.id)) out.push({ what: `${itemLabel(ia.kind, ia.label)} removed`, detail: '' });
+  for (const ia of a.items) if (!used.has(ia.id) && !b.items.some((i) => i.id === ia.id)) out.push({ what: `${itemLabel(ia.kind, ia.label)} removed`, detail: '' });
   if (a.floor !== b.floor) out.push({ what: 'Floor finish', detail: `${a.floor} → ${b.floor}` });
   return out;
 };
