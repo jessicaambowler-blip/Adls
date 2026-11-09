@@ -64,6 +64,60 @@ const shareBones = (m: THREE.SkinnedMesh, bones: Record<string, THREE.Bone>) =>
     return b;
   });
 
+// A simple painted eye (sclera, iris, pupil) used until the original eye textures are exported.
+// MetaHuman eyeballs are UV-mapped from the front with the iris centred in UV space.
+let eyeTexture: THREE.Texture | null = null;
+const getEyeTexture = () => {
+  if (eyeTexture) return eyeTexture;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#f1ede4';
+  g.fillRect(0, 0, 256, 256);
+  const iris = g.createRadialGradient(128, 128, 8, 128, 128, 40);
+  iris.addColorStop(0, '#5a4128');
+  iris.addColorStop(0.75, '#6e5233');
+  iris.addColorStop(1, '#2c2015');
+  g.fillStyle = iris;
+  g.beginPath(); g.arc(128, 128, 40, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#0d0d0d';
+  g.beginPath(); g.arc(128, 128, 16, 0, Math.PI * 2); g.fill();
+  eyeTexture = new THREE.CanvasTexture(c);
+  eyeTexture.colorSpace = THREE.SRGBColorSpace;
+  return eyeTexture;
+};
+
+/**
+ * Materials for a MetaHuman face mesh. Unreal's FBX export numbers the face's parts by section, in
+ * the MetaHuman order head, teeth, left eye, right eye, eye shell, eyelashes, tear line – not by the
+ * material list – so the parts are recognised by that order when the mesh has those seven parts.
+ */
+const faceMaterials = (m: THREE.SkinnedMesh, skin = SKIN) => {
+  const groups = m.geometry.groups;
+  const names = (Array.isArray(m.material) ? m.material : [m.material]).map((x) => x.name || '');
+  const hidden = new THREE.MeshBasicMaterial({ visible: false });
+  const byPart = [
+    mat(skin, 0.55),
+    mat('#ece6da', 0.35),
+    new THREE.MeshStandardMaterial({ map: getEyeTexture(), roughness: 0.15 }),
+    new THREE.MeshStandardMaterial({ map: getEyeTexture(), roughness: 0.15 }),
+    hidden,
+    mat('#2a1e16', 0.9),
+    hidden,
+  ];
+  if (groups.length === 7 && names.some((n) => /teeth/i.test(n))) {
+    groups.forEach((g, i) => (g.materialIndex = i));
+    return byPart;
+  }
+  return names.map((n) => {
+    if (/occlusion|lacrimal|blend|shell|cartilage/i.test(n)) return hidden;
+    if (/lash/i.test(n)) return mat('#2a1e16', 0.9);
+    if (/eye/i.test(n)) return new THREE.MeshStandardMaterial({ map: getEyeTexture(), roughness: 0.15 });
+    if (/teeth/i.test(n)) return mat('#ece6da', 0.35);
+    return mat(skin, 0.55);
+  });
+};
+
 /** A MetaHuman: body, clothes and face sharing one skeleton. */
 const buildPerson = async (spec: PersonSpec, base: string, root: THREE.Group): Promise<PersonRig> => {
   const sc = { person: spec };
@@ -75,7 +129,7 @@ const buildPerson = async (spec: PersonSpec, base: string, root: THREE.Group): P
   let bodyMesh: THREE.SkinnedMesh | undefined;
   body.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh) bodyMesh = x as THREE.SkinnedMesh; });
   if (!bodyMesh) throw new Error('no body mesh');
-  bodyMesh.material = mat(SKIN, 0.6);
+  bodyMesh.material = mat(spec.skin ?? SKIN, 0.55);
   person.add(body);
   const bones: Record<string, THREE.Bone> = {};
   bodyMesh.skeleton.bones.forEach((b) => (bones[b.name] = b));
@@ -97,16 +151,7 @@ const buildPerson = async (spec: PersonSpec, base: string, root: THREE.Group): P
   face.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh) faceMeshes.push(x as THREE.SkinnedMesh); });
   for (const m of faceMeshes) {
     m.bind(new THREE.Skeleton(shareBones(m, bones), m.skeleton.boneInverses), m.bindMatrix);
-    const ms = Array.isArray(m.material) ? m.material : [m.material];
-    const out = ms.map((mt) => {
-      const n = mt.name || '';
-      if (/occlusion|blend|shell|cartilage|lash/i.test(n)) return new THREE.MeshBasicMaterial({ visible: false });
-      if (/eye/i.test(n)) return mat('#f2efe8', 0.3);
-      if (/teeth/i.test(n)) return mat('#eeeae2', 0.4);
-      if (/brow/i.test(n)) return mat('#3b2a20', 0.9);
-      return mat(SKIN, 0.6);
-    });
-    m.material = out.length === 1 ? out[0] : out;
+    m.material = faceMaterials(m, spec.skin);
     person.add(m);
   }
   // A camera anchor on the head whose +z is where the person faces and +y is up. Built in the rest
@@ -225,7 +270,6 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
     const c = built.chair(t);
     chair.root.position.set(c.x / 1000, 0, c.y / 1000);
     chair.root.rotation.y = THREE.MathUtils.degToRad(-c.heading);
-    chair.root.scale.setScalar(1.18); // the original chair's seat is higher than the app's model
     for (const w of chair.wheels) w.obj.rotation.x = c.wheelTurn / 1000 / w.radius;
   });
 
@@ -236,7 +280,7 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
       <primitive object={chair.root} />
       {rig && (
         <group position={[off[0] / 100, 0, off[1] / 100]}>
-          <group rotation-x={-Math.PI / 2} scale={0.01}>
+          <group position-y={-(o.scene.floorZ ?? 0) / 100} rotation-x={-Math.PI / 2} scale={0.01}>
             <primitive object={rig.root} />
           </group>
         </group>

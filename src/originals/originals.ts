@@ -35,6 +35,8 @@ export interface Track { fps: number; frames: number; data: number[] }
 
 export interface PersonSpec {
   label: string; body: string; face: string; clothes: string[]; anim: string; animFps: number;
+  /** skin colour (placeholder until the original textures are exported) */
+  skin?: string;
   /** world transform of the person's Body component over time */
   track: Track;
 }
@@ -44,6 +46,8 @@ export interface OriginalSceneData {
   title: string;
   duration: number;
   offsetCm: [number, number];
+  /** height of the room's floor in Unreal (cm); everything is lowered by this */
+  floorZ?: number;
   room: [number, number];
   person: PersonSpec;
   /** other people in the recording (e.g. a carer) */
