@@ -32,6 +32,8 @@ interface UiState {
   cameraNonce: number;
   wallMode: WallMode;
   highQuality: boolean;
+  /** names and measurements on the plan, and contact tags in 3D (the selected thing always shows its own) */
+  showLabels: boolean;
   tool: Tool;
   time: number;
   playing: boolean;
@@ -99,6 +101,7 @@ export const useStore = create<State>((set, get) => ({
   cameraNonce: 0,
   wallMode: 'cutaway',
   highQuality: true,
+  showLabels: (() => { try { return localStorage.getItem('visadls-labels') !== 'off'; } catch { return true; } })(),
   tool: 'select',
   time: 0,
   playing: false,

@@ -21,6 +21,7 @@ export const Timeline = () => {
   const selectCamera = useStore((s) => s.selectCamera);
   const wallMode = useStore((s) => s.wallMode);
   const hq = useStore((s) => s.highQuality);
+  const labels = useStore((s) => s.showLabels);
   const active = useStore((s) => s.activeLayout);
   const built = useActivity(active);
 
@@ -61,8 +62,16 @@ export const Timeline = () => {
         <span className="spacer" />
         <span className="row-label">Walls</span>
         <Segmented<WallMode> label="Walls" value={wallMode} onChange={(wm) => set({ wallMode: wm })} options={[{ value: 'cutaway', label: 'Cut away' }, { value: 'low', label: 'Low' }, { value: 'full', label: 'Full' }]} />
+        <button className={labels ? 'on' : ''} onClick={() => toggleLabels()} title="Show or hide names, measurements and contact tags">{labels ? 'Labels on' : 'Labels off'}</button>
         <button className={hq ? 'on' : ''} onClick={() => set({ highQuality: !hq })} title="Turn off on slower computers or tablets">{hq ? 'High quality' : 'Fast mode'}</button>
       </div>
     </div>
   );
+};
+
+/** Show or hide labels everywhere, and remember the choice in this browser. */
+export const toggleLabels = () => {
+  const on = !useStore.getState().showLabels;
+  useStore.getState().set({ showLabels: on });
+  try { localStorage.setItem('visadls-labels', on ? 'on' : 'off'); } catch { /* private browsing */ }
 };

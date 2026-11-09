@@ -290,6 +290,7 @@ const ActivityProps = ({ built }: { built: BuiltActivity }) => {
 
 const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: ActivitySettings }) => {
   const route = built.route;
+  const labels = useStore((s) => s.showLabels);
   const C = CHAIRS[settings.chair];
   const line = useMemo(() => (route ? route.samples.filter((_, i) => i % 3 === 0).map((s) => [s.x / 1000, 0.015, s.y / 1000] as [number, number, number]) : []), [route]);
   const prints = useMemo(() => {
@@ -315,7 +316,7 @@ const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: Act
             <ringGeometry args={[0.22, 0.28, 40]} />
             <meshBasicMaterial color="#e53935" transparent opacity={0.85} />
           </mesh>
-          {route.contacts.findIndex((x) => x.with === c.with) === i && (
+          {labels && route.contacts.findIndex((x) => x.with === c.with) === i && (
             <Html center position={[0, 0.9, 0]} zIndexRange={[10, 0]}><div className="tag3d warn">Possible contact: {c.with}</div></Html>
           )}
         </group>
@@ -326,6 +327,7 @@ const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: Act
 
 const Pins = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const notes = useStore((s) => s.project.notes);
+  const labels = useStore((s) => s.showLabels);
   return (
     <>
       {notes.filter((n) => n.pin && n.layout === layoutKey).map((n, i) => (
@@ -338,7 +340,7 @@ const Pins = ({ layoutKey }: { layoutKey: LayoutKey }) => {
             <cylinderGeometry args={[0.008, 0.008, 1.6]} />
             <meshBasicMaterial color="#555" />
           </mesh>
-          <Html center position={[0, 1.8, 0]} zIndexRange={[10, 0]}><div className="tag3d">{i + 1}. {n.text.slice(0, 40)}{n.text.length > 40 ? '…' : ''}</div></Html>
+          <Html center position={[0, 1.8, 0]} zIndexRange={[10, 0]}><div className="tag3d">{labels ? <>{i + 1}. {n.text.slice(0, 40)}{n.text.length > 40 ? '…' : ''}</> : i + 1}</div></Html>
         </group>
       ))}
     </>

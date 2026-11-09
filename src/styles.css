@@ -296,3 +296,5 @@ button.wide { width: 100%; margin-bottom: 10px; }
 .btnrow.nudge button { flex: 1; padding: 6px 4px; font-size: 13px; }
 .tool-banner, .verify-flag { pointer-events: none; }
 .tool-banner { top: auto; bottom: 40px; }
+.plan-tools .labels-toggle { font-size: 14px; }
+.plan-tools .labels-toggle.on { background: var(--accent); color: #fff; border-color: var(--accent); }

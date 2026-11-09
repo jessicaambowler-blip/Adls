@@ -8,6 +8,7 @@ import {
 import { chairFootprint } from '../model/pathfinding';
 import { useStore } from '../model/store';
 import { askValue } from './dialogs';
+import { toggleLabels } from './Timeline';
 import { runDetection } from './detectFlow';
 import type { Item, Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
 import { addRoom, addWalls, applyWallDrag, beginWallDrag, moveCorner, snapPoint, splitAtJunctions, splitWall, tidyWalls, type WallDrag } from '../model/walls';
@@ -123,6 +124,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const layout = useStore((s) => s.project.layouts[layoutKey]);
   const selection = useStore((s) => s.selection);
   const tool = useStore((s) => s.tool);
+  const labels = useStore((s) => s.showLabels);
   const settings = useStore((s) => s.project.activity);
   const notes = useStore((s) => s.project.notes);
   const set = useStore((s) => s.set);
@@ -512,7 +514,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           </>
         )}
         {o.kind === 'sliding-door' && <line x1={s.x} y1={s.y} x2={e.x} y2={e.y} className="door-leaf" transform={`translate(${n.x * 40} ${n.y * 40})`} />}
-        {(sel || o.width > fs * 5) && (
+        {(sel || (labels && o.width > fs * 5)) && (
           <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle">
             {o.kind === 'opening' ? `${o.width} opening` : `~${clearOpening(o)} clear`}
           </text>
@@ -575,7 +577,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
             </g>
           );
         })}
-        {layout.items.map((it) => (it.kind === 'turning-space' || it.kind === 'grab-rail' ? null : (
+        {layout.items.map((it) => (it.kind === 'turning-space' || it.kind === 'grab-rail' || (!labels && !(selection?.type === 'item' && selection.id === it.id)) ? null : (
           <text key={`l${it.id}`} x={it.x} y={it.y + fs * 0.35} fontSize={fs * (it.w < 600 || it.d < 500 ? 0.7 : 0.9)} className="item-label" pointerEvents="none">
             {itemLabel(it.kind, it.label)}
           </text>
@@ -608,7 +610,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
                   setDrag({ kind: 'wall', id: piece.id, start: p, d: beginWallDrag(l, piece.id), n: wallNormal(piece) });
                 }}
               />
-              {(sel || L > fs * 9) && (
+              {(sel || (labels && L > fs * 9)) && (
                 <text x={lbl.x} y={lbl.y} fontSize={fs * 0.8} className="dim-label" textAnchor="middle" pointerEvents="none">
                   {Math.round(L - w.thickness)}
                 </text>
@@ -737,6 +739,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         ))}
       </div>
       <div className="plan-tools">
+        <button className={`labels-toggle ${labels ? 'on' : ''}`} onClick={() => toggleLabels()} title={labels ? 'Hide names and measurements' : 'Show names and measurements'} aria-pressed={labels}>Aa</button>
         <button onClick={() => setVb((v) => ({ x: v.x + v.w * 0.1, y: v.y + v.h * 0.1, w: v.w * 0.8, h: v.h * 0.8 }))} aria-label="Zoom in">＋</button>
         <button onClick={() => setVb((v) => ({ x: v.x - v.w * 0.125, y: v.y - v.h * 0.125, w: v.w * 1.25, h: v.h * 1.25 }))} aria-label="Zoom out">－</button>
         <button onClick={fit}>Fit</button>
