@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { CATALOGUE, catalogueEntry, itemLabel } from '../model/catalogue';
-import { clearOpening, layoutCentre, uid, wallLength } from '../model/geometry';
+import { clearOpening, layoutCentre, uid, wallLength, wallNormal, wallPoint } from '../model/geometry';
+import { applyWallDrag, beginWallDrag, removeWall, setWallLength, splitAtJunctions, splitWall, tidyWalls } from '../model/walls';
 import { rectInfo, setRoomSize } from '../model/edit';
 import { useStore } from '../model/store';
 import { TEMPLATES, blankRoom, cloneLayout, lowsetHouse, makeItem } from '../model/templates';
@@ -173,11 +174,30 @@ const WallInspector = ({ id }: { id: string }) => {
     updateLayout((l) => { l.openings.push(o); });
     set({ selection: { type: 'opening', id: o.id } });
   };
+  // move the wall sideways; name the buttons by screen direction
+  const n = wallNormal(w);
+  const horizontal = Math.abs(n.y) > Math.abs(n.x);
+  const plusLabel = horizontal ? (n.y > 0 ? 'Down' : 'Up') : (n.x > 0 ? 'Right' : 'Left');
+  const minusLabel = horizontal ? (n.y > 0 ? 'Up' : 'Down') : (n.x > 0 ? 'Left' : 'Right');
+  const nudge = (mm: number) => updateLayout((l) => { splitAtJunctions(l); const piece = l.walls.find((x) => x.id === id); if (piece) applyWallDrag(l, beginWallDrag(l, id), mm); tidyWalls(l); });
   return (
     <div className="inspector">
       <h3>Wall</h3>
-      <p className="muted">Inside length about <b>{Math.round(L - w.thickness)} mm</b>. Drag the wall on the plan to move it – connected walls stretch to follow.</p>
+      <NumberField label="Inside length" value={Math.round(L - w.thickness)} onChange={(v) => updateLayout((l) => setWallLength(l, id, v))} step={10} min={200} max={30000} />
+      <div className="row-label">Move this wall</div>
+      <div className="btnrow nudge">
+        <button onClick={() => nudge(-100)}>{minusLabel} 100</button>
+        <button onClick={() => nudge(-10)}>{minusLabel} 10</button>
+        <button onClick={() => nudge(10)}>{plusLabel} 10</button>
+        <button onClick={() => nudge(100)}>{plusLabel} 100</button>
+      </div>
+      <p className="muted">Or drag it on the plan, or use the arrow keys (Shift = 100 mm). Walls joined to it stretch to follow; a wall carrying on in line gets a step. Drag the <b>corner squares</b> to change its ends.</p>
+      <div className="btnrow">
+        <button onClick={() => { let ids: [string, string] | null = null; updateLayout((l) => { ids = splitWall(l, id, wallPoint(w, L / 2)); }); if (ids) set({ selection: { type: 'wall', id: (ids as [string, string])[0] } }); }}>✂ Split in half</button>
+        <button onClick={() => set({ tool: 'split-wall', selection: null })}>✂ Split at a point…</button>
+      </div>
       <NumberField label="Thickness" value={w.thickness} onChange={(t) => updateLayout((l) => { const x = l.walls.find((q) => q.id === id); if (x) x.thickness = t; })} step={10} min={50} max={400} />
+      <div className="row-label">Add to this wall</div>
       <div className="btnrow">
         <button onClick={() => addOpening('door')}>＋ Door</button>
         <button onClick={() => addOpening('sliding-door')}>＋ Sliding door</button>
@@ -185,7 +205,7 @@ const WallInspector = ({ id }: { id: string }) => {
         <button onClick={() => addOpening('window')}>＋ Window</button>
       </div>
       {layout.walls.length > 3 && (
-        <div className="btnrow"><button className="danger" onClick={() => { updateLayout((l) => { l.walls = l.walls.filter((x) => x.id !== id); l.openings = l.openings.filter((o) => o.wallId !== id); }); set({ selection: null }); }}>Remove wall</button></div>
+        <div className="btnrow"><button className="danger" onClick={() => { updateLayout((l) => removeWall(l, id)); set({ selection: null }); }}>Remove wall</button></div>
       )}
     </div>
   );
@@ -310,7 +330,7 @@ export const RoomPanel = () => {
         </div>
         <div className="btnrow">
           <button onClick={() => applyTemplate(() => blankRoom(newW, newD))}>Create empty room</button>
-          <button onClick={() => set({ tool: 'draw-room', selection: null })}>Draw room outline</button>
+          <button onClick={() => set({ tool: 'draw-room', selection: null })} title="Replaces all the walls in this layout">Trace a new outline</button>
         </div>
       </Section>
 

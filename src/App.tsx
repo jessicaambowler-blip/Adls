@@ -12,6 +12,9 @@ import { Help, Summary } from './ui/Summary';
 import { Timeline } from './ui/Timeline';
 import { Dialogs, HOSTED, ask, notify } from './ui/dialogs';
 import { loadOriginal, probeOriginals } from './originals/originals';
+import { wallNormal } from './model/geometry';
+import { applyWallDrag, beginWallDrag, removeWall, splitAtJunctions, tidyWalls } from './model/walls';
+import type { Vec2 } from './model/types';
 
 const LABEL: Record<LayoutKey, string> = { existing: 'Existing home', proposed: 'Proposed changes' };
 
@@ -54,6 +57,24 @@ const useKeyboard = () => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo(); return; }
       if (e.key === ' ') { e.preventDefault(); s.set({ playing: !s.playing, time: !s.playing && s.time >= s.duration ? 0 : s.time }); return; }
       const sel = s.selection;
+      if (sel?.type === 'wall') {
+        const w = s.layout().walls.find((x) => x.id === sel.id);
+        if (!w) return;
+        const n = wallNormal(w);
+        const step = e.shiftKey ? 100 : 10;
+        const keyDir: Record<string, Vec2> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
+        const d = keyDir[e.key];
+        if (d) {
+          const along = d.x * n.x + d.y * n.y; // only the direction across the wall moves it
+          if (Math.abs(along) > 0.7) {
+            e.preventDefault();
+            s.updateLayout((l) => { splitAtJunctions(l); applyWallDrag(l, beginWallDrag(l, sel.id), Math.sign(along) * step); tidyWalls(l); });
+          }
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (s.layout().walls.length > 3) { s.updateLayout((l) => removeWall(l, sel.id)); s.set({ selection: null }); }
+        }
+        return;
+      }
       if (sel?.type === 'item') {
         const step = e.shiftKey ? 100 : 10;
         const mv: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };

@@ -2,6 +2,7 @@ import { CATALOGUE } from './catalogue';
 import { uid } from './geometry';
 import type { Item, ItemKind, Layout, Opening, Project, Wall } from './types';
 import type { OriginalSceneData } from '../originals/originals';
+import { splitAtJunctions } from './walls';
 
 const T = 110; // typical internal stud wall thickness incl. plasterboard (mm)
 
@@ -232,7 +233,7 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     makeItem('dining-table', 7700, 8700),
     makeItem('dining-chair', 7700 - 750 - 300, 8700, -90),
   );
-  return base(P ? 'Low-set house – proposed' : 'Low-set house – existing', {
+  const house = base(P ? 'Low-set house – proposed' : 'Low-set house – existing', {
     walls: [...outer, hallN, hallS, bed1E, bathE],
     openings,
     items,
@@ -242,6 +243,9 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     end: { x: 8300, y: 6800 },
     targetItemId: bed.id,
   });
+  // each room's stretch of a wall is its own piece, so it can be moved on its own
+  splitAtJunctions(house);
+  return house;
 };
 
 export const TEMPLATES = [

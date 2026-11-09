@@ -122,7 +122,7 @@ export const Help = () => {
       <div className="modal-card">
         <h2>How to use VisADLs</h2>
         <ol className="help-steps">
-          <li><b>Room</b> – pick a template, type in room sizes, or upload a floor plan to trace. Drag furniture, walls and doors on the plan. Every number is in millimetres and can be typed in.</li>
+          <li><b>Room</b> – start from the demo house, a template, or an uploaded floor plan. The tools at the top of the plan: <b>Select</b> (drag furniture, doors, walls and wall corners), <b>Walls</b> (click corners to draw new walls; type a length and press Enter), <b>Room</b> (drag out a new room) and <b>Split</b> (cut a wall so just part of it can move). Moving a wall stretches the walls joined to it. Every number is in millimetres and can be typed in.</li>
           <li><b>Activity</b> – choose bed transfer, toilet transfer, using the basin or moving around. Press ▶ to watch. Drag the timeline to look at any moment.</li>
           <li><b>Views</b> – try “Seated eye level” to see from the wheelchair, or “From above” to see clearances.</li>
           <li><b>Existing / Proposed</b> – switch at the top. Make changes to “Proposed” and press “Compare” to see both side by side.</li>

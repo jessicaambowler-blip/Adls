@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "bench": "tsx bench/detect-bench.ts"
+    "bench": "tsx bench/detect-bench.ts",
+    "test": "tsx tests/walls.test.ts"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",

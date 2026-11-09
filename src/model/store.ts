@@ -13,7 +13,7 @@ export type Selection =
 export type CameraPreset = 'overview' | 'top' | 'seated' | 'support' | 'follow' | 'closeup';
 export type ViewMode = 'split' | '3d' | 'plan';
 export type WallMode = 'cutaway' | 'full' | 'low';
-export type Tool = 'select' | 'draw-room' | 'calibrate' | 'pin-note' | 'detect-area';
+export type Tool = 'select' | 'draw-room' | 'draw-wall' | 'add-room' | 'split-wall' | 'calibrate' | 'pin-note' | 'detect-area';
 
 /** Walls/openings proposed by automatic detection, waiting for review (plan mm). */
 export interface DetectionProposal {

@@ -281,3 +281,18 @@ svg.plan.crosshair { cursor: crosshair; }
   .modal-card { box-shadow: none; max-width: none; padding: 0; }
 }
 button.wide { width: 100%; margin-bottom: 10px; }
+
+/* plan editing tools */
+.plan-edit-tools { position: absolute; left: 8px; top: 8px; display: flex; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 80px); background: rgba(255, 255, 255, 0.92); padding: 4px; border-radius: 10px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); z-index: 2; }
+.plan-edit-tools button { padding: 6px 10px; font-size: 13px; border-radius: 7px; background: transparent; border-color: transparent; }
+.plan-edit-tools button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.plan-edit-tools button span { font-size: 15px; }
+.tool-banner { top: 58px; }
+.corner-handle { fill: #fff; stroke: #ff8a00; stroke-width: 18; cursor: crosshair; vector-effect: non-scaling-stroke; }
+.corner-handle { stroke-width: 2.5px; }
+.snap-pt { fill: none; stroke: #ff8a00; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.room-preview { fill: rgba(255, 138, 0, 0.12); stroke: #ff8a00; stroke-width: 2px; stroke-dasharray: 8 5; vector-effect: non-scaling-stroke; }
+.split-line { stroke: #d32f2f; stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.btnrow.nudge button { flex: 1; padding: 6px 4px; font-size: 13px; }
+.tool-banner, .verify-flag { pointer-events: none; }
+.tool-banner { top: auto; bottom: 40px; }
