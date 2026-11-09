@@ -147,6 +147,11 @@ export default function App() {
     probeOriginals();
     const id = useStore.getState().project.activity.originalId;
     if (useStore.getState().project.activity.type === 'original' && id) loadOriginal(id);
+    // Persona 2 (MetaHuman) is built from her recording
+    if (useStore.getState().project.activity.character === 'p2') loadOriginal('p2-bed-transfer');
+    return useStore.subscribe((s, prev) => {
+      if (s.project.activity.character === 'p2' && prev.project.activity.character !== 'p2') loadOriginal('p2-bed-transfer');
+    });
   }, []);
   usePlayback();
   useKeyboard();

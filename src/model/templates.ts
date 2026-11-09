@@ -151,6 +151,99 @@ export const blankRoom = (W: number, D: number, name = 'Room'): Layout => {
   });
 };
 
+/**
+ * A small low-set brick home (typical of 1980s–2000s Queensland): bedrooms and bathroom off a hallway,
+ * open-plan living, kitchen and dining at the front. Internal envelope 11.0 × 10.0 m.
+ * 'existing' has the usual barriers (720 mm doors, queen bed hard against furniture, a bath, a hall
+ * table narrowing the hallway, a rug); 'proposed' shows typical modifications (920 mm doors, a sliding
+ * bathroom door, a level-entry shower, a care bed with room for a hoist transfer, clutter removed).
+ */
+export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
+  const W = 11000, D = 10000, h = T / 2;
+  const P = variant === 'proposed';
+  const outer = rectWalls(W, D);
+  const [top, right, bottom, left] = outer;
+  const wl = (ax: number, ay: number, bx: number, by: number): Wall => ({ id: uid('wall'), a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness: T });
+  const hallN = wl(-h, 4000, W + h, 4000); // bedrooms/bathroom | hallway
+  const hallS = wl(6000, 5100, W + h, 5100); // hallway | kitchen (the living room is open to the hall)
+  const bed1E = wl(4200, -h, 4200, 4000);
+  const bathE = wl(6800, -h, 6800, 4000);
+  const dw = P ? 920 : 720;
+  const at = (wall: Wall, x: number) => x - wall.a.x; // offset along a west→east wall
+  const openings: Opening[] = [
+    door(hallN, at(hallN, P ? 3200 : 3600), P ? 1020 : dw, { swingSide: -1, hinge: 'end' }),
+    P ? { ...door(hallN, at(hallN, 5300), 1020, { swingSide: 1 }), kind: 'sliding-door' as const } : door(hallN, at(hallN, 5300), dw, { swingSide: -1 }),
+    door(hallN, at(hallN, 7500), dw, { swingSide: -1 }),
+    { ...door(hallS, at(hallS, 9900), P ? 1000 : 820), kind: 'opening' as const },
+    door(bottom, W + h - 4100, P ? 1020 : 820, { hinge: 'end' }),
+    windowOn(top, 2100 + h, 1500),
+    windowOn(top, 5500 + h, 600, { sill: 1400, height: 600 }),
+    windowOn(top, 9000 + h, 1500),
+    windowOn(bottom, W + h - 2300, 2400),
+    windowOn(bottom, W + h - 8500, 1800),
+    windowOn(right, 7700 + h, 1500, { sill: 1050, height: 1000 }),
+    windowOn(left, D + h - 7500, 1500),
+  ];
+  const items: Item[] = [];
+  // ---- main bedroom
+  let bed: Item;
+  if (P) {
+    // care bed towards the east wall, leaving the west side clear for the wheelchair and hoist transfer
+    bed = makeItem('bed-adjustable', 2950, 55 + 2150 / 2, 0, { label: 'Care bed' });
+    items.push(bed, makeItem('bedside-table', 2950 + 500 + 260, 255), makeItem('wardrobe', 355, 3150, -90, { w: 1500 }));
+  } else {
+    bed = makeItem('bed-queen', 2100, 55 + 2030 / 2);
+    items.push(
+      bed,
+      makeItem('bedside-table', 2100 - 765 - 250, 255),
+      makeItem('bedside-table', 2100 + 765 + 250, 255),
+      makeItem('wardrobe', 355, 2950, -90, { w: 1800 }),
+      makeItem('drawers', 4145 - 225, 2900, 90, { w: 900 }),
+    );
+  }
+  // ---- bathroom (x 4200–6800, y 0–4000)
+  if (P) {
+    items.push(
+      makeItem('shower', 4255 + 640, 55 + 650, 0, { w: 1280, d: 1300 }),
+      makeItem('toilet', 6745 - 350, 2100, 90),
+      makeItem('grab-rail', 6745 - 40, 1450, 90, { w: 700 }),
+      makeItem('basin', 4255 + 225, 2700, -90),
+      makeItem('shower-commode', 5900, 900),
+    );
+  } else {
+    items.push(
+      makeItem('bath', 4255 + 840, 55 + 380),
+      makeItem('toilet', 6745 - 350, 2100, 90),
+      makeItem('vanity', 4255 + 240, 2600, -90),
+    );
+  }
+  // ---- second bedroom (x 6800–11000, y 0–4000)
+  items.push(makeItem('bed-single', 9800, 55 + 940), makeItem('bedside-table', 9800 - 460 - 250, 255), makeItem('desk', 7600, 355, 0, { w: 1200 }));
+  // ---- hallway
+  if (!P) items.push(makeItem('hall-table', 8300, 5100 - 55 - 175, 180, { w: 1000 }), makeItem('plant', 10700, 4600));
+  // ---- living (x 0–6000, y 5100–10000)
+  items.push(makeItem('tv-unit', 55 + 210, 7500, -90), makeItem('sofa', 2600, 7500, 90));
+  items.push(P ? makeItem('armchair', 5300, 9150, 90) : makeItem('armchair', 1800, 9350, 180));
+  if (!P) items.push(makeItem('rug', 1800, 7500, 90, { w: 2300, d: 1600 }));
+  // ---- kitchen & dining (x 6000–11000, y 5100–10000)
+  items.push(
+    makeItem('kitchen-bench', W - 55 - 300, 7700, 90, { w: P ? 3000 : 3000 }),
+    makeItem('fridge', W - 55 - 350, 5700, 90),
+    makeItem('dining-table', 7700, 8700),
+    makeItem('dining-chair', 7700 - 750 - 300, 8700, -90),
+  );
+  return base(P ? 'Low-set house – proposed' : 'Low-set house – existing', {
+    walls: [...outer, hallN, hallS, bed1E, bathE],
+    openings,
+    items,
+    floor: 'timber',
+    wallColor: '#efebe4',
+    start: { x: 3700, y: 8700, heading: 180 },
+    end: { x: 8300, y: 6800 },
+    targetItemId: bed.id,
+  });
+};
+
 export const TEMPLATES = [
   { id: 'bedroom', label: 'Bedroom', make: () => bedroomTemplate() },
   { id: 'bathroom', label: 'Bathroom', make: () => bathroomTemplate() },
@@ -159,16 +252,18 @@ export const TEMPLATES = [
 ];
 
 export const defaultProject = (): Project => {
-  const existing = bedroomTemplate();
+  const existing = lowsetHouse('existing');
   return {
     version: 1,
     title: 'Home modification session',
     consumerName: '',
     otName: '',
-    layouts: { existing, proposed: cloneLayout(existing, 'Proposed') },
+    layouts: { existing, proposed: lowsetHouse('proposed') },
     activity: {
       type: 'bed-transfer',
-      chair: 'manual',
+      character: 'p2',
+      bedMethod: 'hoist',
+      chair: 'power',
       supportPerson: false,
       transferSide: 'auto',
       showSweptPath: true,

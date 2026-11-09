@@ -1,5 +1,5 @@
 import { itemBlocks, itemLabel } from './catalogue';
-import { dirOfHeading, dist, headingOf, itemCorners, layoutBounds, polygonsOverlap, rotate, solidWallRects, sub } from './geometry';
+import { dirOfHeading, dist, headingOf, itemCorners, layoutBounds, polygonsOverlap, rotate, solidWallRects, sub, wallDir, wallNormal, wallPoint } from './geometry';
 import type { Layout, Vec2 } from './types';
 
 export interface PoseSample { x: number; y: number; heading: number; t: number; dist: number }
@@ -194,6 +194,41 @@ export interface RouteRequest {
   speed?: number;
 }
 
+/**
+ * Make the route pass square through doorways, as a wheelchair user lines up before a door: where a
+ * path segment crosses a door or opening, add points `lead` mm either side of its centre along the
+ * wall's normal. Without this, the smoothed path cuts diagonally across narrow doorways and a long
+ * chair clips the frame.
+ */
+const alignDoors = (layout: Layout, path: Vec2[], lead = 650): Vec2[] => {
+  const doors = layout.openings.filter((o) => o.kind !== 'window').map((o) => {
+    const w = layout.walls.find((x) => x.id === o.wallId);
+    return w ? { c: wallPoint(w, o.offset), d: wallDir(w), n: wallNormal(w), half: o.width / 2 } : null;
+  }).filter((x): x is NonNullable<typeof x> => !!x);
+  const out: Vec2[] = [path[0]];
+  for (let i = 1; i < path.length; i++) {
+    const p = path[i - 1], q = path[i];
+    const hits: { t: number; pts: Vec2[] }[] = [];
+    for (const dr of doors) {
+      const sp = (p.x - dr.c.x) * dr.n.x + (p.y - dr.c.y) * dr.n.y;
+      const sq = (q.x - dr.c.x) * dr.n.x + (q.y - dr.c.y) * dr.n.y;
+      if (sp === sq || Math.sign(sp) === Math.sign(sq)) continue;
+      const t = sp / (sp - sq);
+      const x = { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
+      if (Math.abs((x.x - dr.c.x) * dr.d.x + (x.y - dr.c.y) * dr.d.y) > dr.half + 100) continue;
+      const s = Math.sign(sq - sp);
+      // before the door: no further back than where the segment starts; after it: the full lead,
+      // so the whole chair is through before it turns
+      const l0 = Math.min(lead, Math.abs(sp) - 1);
+      if (l0 < 150) continue;
+      hits.push({ t, pts: [{ x: dr.c.x - dr.n.x * s * l0, y: dr.c.y - dr.n.y * s * l0 }, { x: dr.c.x + dr.n.x * s * lead, y: dr.c.y + dr.n.y * s * lead }] });
+    }
+    hits.sort((a, b) => a.t - b.t).forEach((h) => out.push(...h.pts));
+    out.push(q);
+  }
+  return out;
+};
+
 export const planRoute = (layout: Layout, req: RouteRequest): RouteResult => {
   const obstacles = obstaclesOf(layout, req.ignoreItemIds);
   const grid = new Grid(layout, obstacles, [req.start, req.goal]);
@@ -206,7 +241,7 @@ export const planRoute = (layout: Layout, req: RouteRequest): RouteResult => {
   let path: Vec2[] | null = null;
   for (const [r, st] of [[half + 60, 'clear'], [half + 10, 'tight'], [half - 60, 'tight']] as const) {
     path = grid.astar(req.start, preGoal, r);
-    if (path) { status = st; path = simplify(grid, path, r); break; }
+    if (path) { status = st; path = alignDoors(layout, simplify(grid, path, r), req.chairLength / 2 + 250); break; }
   }
   if (!path) { status = 'blocked'; path = [req.start, preGoal]; }
   if (approach !== 0) path.push({ x: req.goal.x, y: req.goal.y });

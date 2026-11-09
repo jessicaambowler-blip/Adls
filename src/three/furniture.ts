@@ -339,6 +339,44 @@ const diningTable: Builder = (w, d, h) => {
   return g;
 };
 
+const sofa: Builder = (w, d, h) => {
+  const f = fabric('#8a8f99');
+  const g = G(
+    boxOn(w - 0.04, 0.24, d - 0.08, f, 0, 0.08, 0.02, 0.04),
+    mesh(rbox(w - 0.1, h - 0.38, 0.2, 0.06, 4), f, [0, 0.36 + (h - 0.38) / 2, -d / 2 + 0.13], [-0.1, 0, 0]),
+    mesh(rbox(0.18, 0.32, d - 0.06, 0.06, 4), f, [-w / 2 + 0.09, 0.48, 0.0]),
+    mesh(rbox(0.18, 0.32, d - 0.06, 0.06, 4), f, [w / 2 - 0.09, 0.48, 0.0]),
+  );
+  // three seat cushions
+  const cw = (w - 0.36) / 3;
+  for (let i = 0; i < 3; i++) g.add(mesh(rbox(cw - 0.01, 0.13, d - 0.3, 0.05, 4), f, [-w / 2 + 0.18 + cw * (i + 0.5), 0.39, 0.07]));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(cyl(0.02, 0.015, 0.08), M.walnut, [sx * (w / 2 - 0.08), 0.04, sz * (d / 2 - 0.1)]));
+  return g;
+};
+
+const diningChair: Builder = (w, d, h) => {
+  const c = new THREE.Group();
+  c.add(boxOn(w - 0.02, 0.03, d - 0.06, M.oak, 0, 0.43, 0.02, 0.006));
+  c.add(mesh(rbox(w - 0.06, 0.03, d - 0.12, 0.012, 3), fabric('#c9b79c'), [0, 0.475, 0.03]));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) c.add(mesh(cyl(0.015, 0.015, 0.43), M.oak, [sx * (w / 2 - 0.04), 0.215, sz * (d / 2 - 0.05)]));
+  c.add(boxOn(w - 0.04, h - 0.5, 0.025, M.oak, 0, 0.47, -d / 2 + 0.04, 0.006));
+  return c;
+};
+
+const tvUnit: Builder = (w, d, h) => {
+  const g = G(boxOn(w, 0.45, d, M.walnut, 0, 0.05, 0, 0.01));
+  for (const sx of [-1, 1]) g.add(mesh(cyl(0.015, 0.015, 0.05), M.blackMetal, [sx * (w / 2 - 0.06), 0.025, 0]));
+  g.add(handle(-w / 4, 0.3, d / 2, 0.14));
+  g.add(handle(w / 4, 0.3, d / 2, 0.14));
+  // television on a stand
+  const tvW = Math.min(1.25, w - 0.2), tvH = Math.min(tvW * 0.58, h - 0.55);
+  g.add(boxOn(0.3, 0.02, 0.18, M.blackMetal, 0, 0.5, 0, 0.004));
+  g.add(mesh(rbox(0.05, 0.07, 0.03, 0.005), M.blackMetal, [0, 0.555, -0.02]));
+  g.add(boxOn(tvW, tvH, 0.04, std('#16181b', 0.25, 0.3), 0, 0.59, -0.02, 0.006));
+  g.add(mesh(new THREE.PlaneGeometry(tvW - 0.03, tvH - 0.03), std('#1f2a36', 0.15, 0.1), [0, 0.59 + tvH / 2, 0.001]));
+  return g;
+};
+
 const hallTable: Builder = (w, d, h) => {
   const g = G(boxOn(w, 0.03, d, M.walnut, 0, h - 0.03, 0, 0.005));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(cyl(0.015, 0.012, h - 0.03), M.blackMetal, [sx * (w / 2 - 0.04), (h - 0.03) / 2, sz * (d / 2 - 0.04)]));
@@ -382,7 +420,7 @@ const turningSpace: Builder = (w) => {
 
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
-  'bedside-table': bedsideTable, wardrobe, drawers, armchair, desk,
+  'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
   toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,

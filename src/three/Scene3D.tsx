@@ -19,6 +19,8 @@ import { buildItem } from './furniture';
 import { buildWalls, floorMaterial } from './walls';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
+import { PersonaActors } from './PersonaActors';
+import { itemToPlan } from '../model/geometry';
 
 const P = (x: number, y: number, h = 0) => new THREE.Vector3(x / 1000, h / 1000, y / 1000);
 
@@ -253,6 +255,39 @@ const Actors = ({ built, settings, live }: { built: BuiltActivity; settings: Act
   );
 };
 
+// cupboard doors (and similar) that open during an activity
+const ActivityProps = ({ built }: { built: BuiltActivity }) => {
+  const doors = useMemo(() => (built.props ?? []).map((p) => {
+    const hinge = new THREE.Group();
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(p.w / 1000, p.h / 1000, 0.018), new THREE.MeshStandardMaterial({ color: '#f4f2ee', roughness: 0.45 }));
+    panel.position.set(p.w / 2000, p.elevation / 1000 + p.h / 2000, 0.009);
+    panel.castShadow = true;
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 12), new THREE.MeshStandardMaterial({ color: '#b9bec4', metalness: 0.9, roughness: 0.3 }));
+    knob.position.set(p.w / 1000 - 0.04, p.elevation / 1000 + p.h / 1000 - 0.1, 0.035);
+    hinge.add(panel, knob);
+    // dark opening behind the door
+    const cavity = new THREE.Mesh(new THREE.PlaneGeometry(p.w / 1000 - 0.02, p.h / 1000 - 0.02), new THREE.MeshStandardMaterial({ color: '#2b2622', roughness: 1 }));
+    const at = itemToPlan(p.item, { x: p.hingeX + p.w / 2, y: p.item.d / 2 + 2 });
+    cavity.position.set(at.x / 1000, (p.elevation + p.h / 2) / 1000, at.y / 1000);
+    cavity.rotation.y = THREE.MathUtils.degToRad(-p.item.rotation);
+    const h = itemToPlan(p.item, { x: p.hingeX, y: p.item.d / 2 + 3 });
+    const base = new THREE.Group();
+    base.position.set(h.x / 1000, 0, h.y / 1000);
+    base.rotation.y = THREE.MathUtils.degToRad(-p.item.rotation);
+    base.add(hinge);
+    return { p, hinge, base, cavity };
+  }), [built]);
+  useFrame(() => {
+    const t = useStore.getState().time;
+    for (const d of doors) {
+      const a = d.p.angle(t);
+      d.hinge.rotation.y = -THREE.MathUtils.degToRad(a); // free edge swings out towards the front
+      d.cavity.visible = a > 1;
+    }
+  });
+  return <>{doors.map((d, i) => <group key={i}><primitive object={d.base} /><primitive object={d.cavity} /></group>)}</>;
+};
+
 const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: ActivitySettings }) => {
   const route = built.route;
   const C = CHAIRS[settings.chair];
@@ -423,7 +458,10 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       <Walls layout={layout} />
       <Items layout={layout} settings={settings} />
       {settings.type === 'original' && <OriginalActors built={built} live={live as never} />}
-      {settings.type !== 'imported' && settings.type !== 'original' && <Actors built={built} settings={settings} live={live} />}
+      {settings.type !== 'imported' && settings.type !== 'original' && (built.mh
+        ? <PersonaActors built={built} settings={settings} live={live} />
+        : <Actors built={built} settings={settings} live={live} />)}
+      {built.props && <ActivityProps built={built} />}
       {settings.type !== 'imported' && settings.type !== 'original' && <RouteOverlay built={built} settings={settings} />}
       <Pins layoutKey={layoutKey} />
       <CameraRig layout={layout} built={built} live={live} />

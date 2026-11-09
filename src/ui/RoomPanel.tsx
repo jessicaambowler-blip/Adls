@@ -3,7 +3,7 @@ import { CATALOGUE, catalogueEntry, itemLabel } from '../model/catalogue';
 import { clearOpening, layoutCentre, uid, wallLength } from '../model/geometry';
 import { rectInfo, setRoomSize } from '../model/edit';
 import { useStore } from '../model/store';
-import { TEMPLATES, blankRoom, cloneLayout, makeItem } from '../model/templates';
+import { TEMPLATES, blankRoom, cloneLayout, lowsetHouse, makeItem } from '../model/templates';
 import type { FloorFinish, Item, Opening } from '../model/types';
 import { loadModelFile } from '../three/assets';
 import { NumberField, Section, Segmented } from './controls';
@@ -235,6 +235,13 @@ export const RoomPanel = () => {
     set({ selection: { type: 'item', id: it.id } });
   };
 
+  const loadHouse = async () => {
+    if (!(await ask('Replace both the existing and proposed layouts with the demo low-set house? You can undo this.', 'Load house'))) return;
+    replaceLayout(lowsetHouse('existing'), 'existing');
+    replaceLayout(lowsetHouse('proposed'), 'proposed');
+    useStore.getState().updateActivity({ character: 'p2', chair: 'power', type: 'bed-transfer', bedMethod: 'hoist' });
+  };
+
   const applyTemplate = async (make: () => ReturnType<typeof blankRoom>) => {
     if (layout.items.length && !(await ask(`Replace the ${active} layout with this template? You can undo this.`, 'Replace layout'))) return;
     const l = make();
@@ -293,6 +300,7 @@ export const RoomPanel = () => {
       {!selection && <p className="hint big">Click anything on the plan (or in 3D) to change it. Editing: <b className={`lk ${active}`}>{active === 'existing' ? 'Existing home' : 'Proposed changes'}</b></p>}
 
       <Section title="1. Start with a room" open={!selection}>
+        <button className="primary wide" onClick={loadHouse}>Load the demo house (existing and proposed)</button>
         <div className="tiles">
           {TEMPLATES.map((t) => <button key={t.id} className="tile" onClick={() => applyTemplate(t.make)}>{t.label}</button>)}
         </div>

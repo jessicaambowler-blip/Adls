@@ -127,3 +127,33 @@ export const walkPose = (phase: number, base: Pose = STANDING): Required<Pose> =
   }
   return p;
 };
+
+// ---- demonstration movements (not motion capture) ----
+
+/** leaning forward, right hand reaching down to a cupboard handle */
+export const REACH_LOW_R: Pose = {
+  ...SEATED,
+  spine: [24, 0, 0], head: [6, 0, 0],
+  shoulderR: [-58, 0, -8], elbowR: [-14, 0, 0], wristR: [-10, 0, 0],
+};
+
+/** right arm swept out to the side as a cupboard door is pulled open */
+export const OPEN_SWING_R: Pose = {
+  ...SEATED,
+  spine: [16, -10, 0], head: [2, -12, 0],
+  shoulderR: [-46, 0, -40], elbowR: [-24, 0, 0], wristR: [-10, 0, 0],
+};
+
+/** leaning in with both hands reaching into a low cupboard */
+export const REACH_IN: Pose = {
+  ...SEATED,
+  spine: [32, 0, 0], chest: [6, 0, 0], head: [4, 0, 0],
+  shoulderL: [-64, 0, 8], shoulderR: [-64, 0, -8], elbowL: [-18, 0, 0], elbowR: [-18, 0, 0], wristL: [-10, 0, 0], wristR: [-10, 0, 0],
+};
+
+/** sitting back holding something against the body with the right arm */
+export const HOLD_ITEM_R: Pose = {
+  ...SEATED,
+  spine: [6, 0, 0],
+  shoulderR: [-26, 0, -12], elbowR: [-100, 0, 0], wristR: [10, 0, 0],
+};

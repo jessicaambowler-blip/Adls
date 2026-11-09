@@ -19,7 +19,7 @@ import { useStore } from '../model/store';
  * published as <name>.b64.json ({"b64": "..."}) and decoded here.
  */
 export const fetchBinary = async (url: string): Promise<ArrayBuffer> => {
-  if (import.meta.env.VITE_HOSTED === '1') {
+  if (import.meta.env?.VITE_HOSTED === '1') {
     const j = await (await fetch(`${url}.b64.json`)).json();
     const bin = atob(j.b64);
     const out = new Uint8Array(bin.length);
@@ -149,7 +149,8 @@ export const loadOriginal = (id: string): Promise<LoadedOriginal | null> => {
       available.set(id, true);
       useStore.getState().bumpAssets();
       return l;
-    } catch {
+    } catch (e) {
+      if ((globalThis as { __dbg?: boolean }).__dbg) console.error(e);
       available.set(id, false);
       useStore.getState().bumpAssets();
       return null;

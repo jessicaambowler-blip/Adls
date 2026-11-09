@@ -280,3 +280,4 @@ svg.plan.crosshair { cursor: crosshair; }
   .modal { position: static; background: none; padding: 0; overflow: visible; }
   .modal-card { box-shadow: none; max-width: none; padding: 0; }
 }
+button.wide { width: 100%; margin-bottom: 10px; }

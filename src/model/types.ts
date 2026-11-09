@@ -37,6 +37,9 @@ export type ItemKind =
   | 'wardrobe'
   | 'drawers'
   | 'armchair'
+  | 'sofa'
+  | 'dining-chair'
+  | 'tv-unit'
   | 'desk'
   | 'toilet'
   | 'basin'
@@ -114,6 +117,8 @@ export type ActivityType =
   | 'bed-transfer'
   | 'toilet-transfer'
   | 'basin'
+  | 'cupboard'
+  | 'chair-transfer'
   | 'imported'
   | 'original';
 
@@ -130,6 +135,10 @@ export interface PersonaSettings {
 
 export interface ActivitySettings {
   type: ActivityType;
+  /** who does the activity: the app's simple figure, or Persona 2 from the original VisADLs project */
+  character?: 'figure' | 'p2';
+  /** bed transfer method: the recorded hoist transfer (Persona 2 only) or a side (sliding) transfer */
+  bedMethod?: 'hoist' | 'side';
   chair: ChairType;
   supportPerson: boolean;
   /** side of the bed/toilet to transfer from, as seen when facing its front */

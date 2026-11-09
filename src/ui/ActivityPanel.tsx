@@ -1,4 +1,4 @@
-import { ACTIVITY_INFO, type BuiltActivity } from '../activities/activities';
+import { ACTIVITY_INFO, P2_ID, type BuiltActivity } from '../activities/activities';
 import { useActivity } from '../activities/useActivity';
 import { CHAIRS, itemLabel } from '../model/catalogue';
 import { useStore } from '../model/store';
@@ -66,6 +66,8 @@ export const ActivityPanel = () => {
       useStore.getState().selectCamera('overview');
     }
   };
+  const p2Ready = originalAvailable(P2_ID) && !!getOriginal(P2_ID);
+  const p2 = s.character === 'p2' && p2Ready;
   const needs = ACTIVITY_INFO[s.type].needs;
   const candidates = needs ? layout.items.filter((i) => needs.includes(i.kind)) : [];
 
@@ -93,11 +95,18 @@ export const ActivityPanel = () => {
             </select>
           </label>
         )}
-        {(s.type === 'bed-transfer' || s.type === 'toilet-transfer') && (
+        {s.type === 'bed-transfer' && p2 && (
+          <>
+            <div className="row-label">How does she get onto the bed?</div>
+            <Segmented label="Bed transfer method" value={s.bedMethod ?? 'hoist'} onChange={(bedMethod) => update({ bedMethod })} options={[{ value: 'hoist', label: 'Ceiling hoist (recorded)' }, { value: 'side', label: 'Side transfer (demonstration)' }]} />
+          </>
+        )}
+        {(s.type === 'bed-transfer' || s.type === 'toilet-transfer' || s.type === 'chair-transfer') && (
           <>
             <div className="row-label">Transfer from which side?</div>
             <Segmented label="Transfer side" value={s.transferSide} onChange={(transferSide) => update({ transferSide })} options={[{ value: 'auto', label: 'Best fit' }, { value: 'left', label: 'Left side' }, { value: 'right', label: 'Right side' }]} />
-            <p className="hint">Left/right as you face the {s.type === 'bed-transfer' ? 'foot of the bed' : 'front of the toilet'}.{s.transferSide === 'auto' && builtActive.side && <> Using the <b>{builtActive.side}</b> side.</>} The orange dashed outline on the plan shows where the chair parks.</p>
+            <p className="hint">Left/right as you face the {s.type === 'bed-transfer' ? 'foot of the bed' : s.type === 'toilet-transfer' ? 'front of the toilet' : 'front of the seat'}.{s.transferSide === 'auto' && builtActive.side && <> Using the <b>{builtActive.side}</b> side.</>} The orange dashed outline on the plan shows where the chair parks.</p>
+            {builtActive.mh?.mirrored && <p className="caveat">The recorded transfer happened on the other side of the bed. It is shown <b>mirrored</b> here.</p>}
           </>
         )}
         {s.type === 'imported' && imported.length > 1 && (
@@ -125,16 +134,23 @@ export const ActivityPanel = () => {
       )}
 
       <Section title="Person & equipment">
+        <div className="row-label">Who</div>
+        <Segmented label="Character" value={s.character ?? 'figure'} onChange={(character) => update(character === 'p2' ? { character, chair: 'power' } : { character })}
+          options={[{ value: 'p2', label: 'Persona 2 (VisADLs)' }, { value: 'figure', label: 'Simple figure' }]} />
+        {s.character === 'p2' && !p2Ready && <p className="hint">Persona 2 is only available in copies of the app that include the original VisADLs recordings.</p>}
+        {p2 && <p className="muted">Persona 2 from the original VisADLs project. Driving and the ceiling hoist transfer use her <b>recorded</b> movement; the other activities are <b>demonstration</b> movements made by the app, not motion capture.</p>}
         <div className="row-label">Wheelchair</div>
         <Segmented label="Wheelchair" value={s.chair} onChange={(chair) => update({ chair })} options={[{ value: 'manual', label: 'Manual' }, { value: 'power', label: 'Powered' }]} />
         <p className="muted">{CHAIRS[s.chair].label}: {CHAIRS[s.chair].width} wide × {CHAIRS[s.chair].length} long, seat {CHAIRS[s.chair].seatHeight} mm.</p>
         <Toggle checked={s.supportPerson} onChange={(supportPerson) => update({ supportPerson })}>Include a support person</Toggle>
+        {!p2 && <>
         <label className="text">Name<input value={s.persona.name} onChange={(e) => persona({ name: e.target.value })} /></label>
         <NumberField label="Height" unit="cm" value={s.persona.heightCm} onChange={(heightCm) => persona({ heightCm })} step={1} min={140} max={205} />
         <div className="row-label">Skin</div><Swatches label="Skin" value={s.persona.skin} colours={SKIN} onChange={(skin) => persona({ skin })} />
         <div className="row-label">Hair</div><Swatches label="Hair" value={s.persona.hair} colours={HAIR} onChange={(hair) => persona({ hair })} />
         <div className="row-label">Top</div><Swatches label="Top" value={s.persona.top} colours={TOPS} onChange={(top) => persona({ top })} />
         <div className="row-label">Trousers</div><Swatches label="Trousers" value={s.persona.bottoms} colours={BOTTOMS} onChange={(bottoms) => persona({ bottoms })} />
+        </>}
         <p className="caveat">The movements shown are illustrative placeholders. Authentic motion-capture sequences (e.g. from the original VisADLs project) can be imported as animated models. A recorded sequence shows one person’s way of doing an activity, not how everyone moves.</p>
       </Section>
     </div>
