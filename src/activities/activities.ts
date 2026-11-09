@@ -135,7 +135,8 @@ const toWorld = (F: Frame2, r: Frame2): Frame2 => ({ ...add(F, rotate(r, F.h)), 
 const frameOf = (c: { x: number; y: number; heading: number }): Frame2 => ({ x: c.x, y: c.y, h: c.heading });
 
 // Persona 2's recording: seated idle movement used while she drives, and the hoist transfer.
-const SEAT_LOOP: [number, number] = [40, 70];
+// her own driving (upright, hand on the joystick); 32–48 s and 78–94 s she leans forward ~20–30°
+const SEAT_LOOP: [number, number] = [6, 28];
 const HOIST_FROM = 150, HOIST_LIFT = 158, HOIST_DOWN = 188, HOIST_TO = 215;
 const loopTau = (t: number) => {
   const [a, b] = SEAT_LOOP, L = b - a;
