@@ -111,7 +111,7 @@ export const ActivityPanel = () => {
 
       {s.type === 'original' && (
         <Section title="About this recording">
-          <p className="muted">This is real motion capture from the original VisADLs project, played on the MetaHuman used in the study. The person's movement, the hoist bar and the wheelchair's path are as recorded; the wheelchair is shown with the app's own powered-chair model. Skin and clothing colours are placeholders until the original textures are exported.</p>
+          <p className="muted">This is real motion capture from the original VisADLs project, played on the MetaHumans used in the study. The person's and carer's movements, the hoist bar and the wheelchair's path and turning are as recorded; the wheelchair is shown with the app's own powered-chair model. Skin and clothing colours are placeholders until the original textures are exported.</p>
           <p className="caveat">A recording shows how one person performed this activity on one occasion. It is not a prediction of how anyone else would move.</p>
         </Section>
       )}

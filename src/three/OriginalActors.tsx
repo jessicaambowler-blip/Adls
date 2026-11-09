@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { BuiltActivity } from '../activities/activities';
-import { BONES, fetchBinary, getOriginal, sampleTrack, type LoadedOriginal } from '../originals/originals';
+import { BONES, fetchBinary, getOriginal, sampleTrack, type AnimData, type LoadedOriginal, type PersonSpec } from '../originals/originals';
 import { useStore } from '../model/store';
 import { buildPowerChair } from './wheelchair';
 
@@ -32,23 +32,41 @@ const setUE = (o: THREE.Object3D, s: number[], scale = 1) => {
 
 const mat = (color: string, roughness = 0.7, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const SKIN = '#b98a6e';
-const clothColour = (file: string) => (/top/i.test(file) ? '#5d84ad' : /btm/i.test(file) ? '#5b5e4c' : /shs/i.test(file) ? '#2a2a2a' : '#888');
+const clothColour = (file: string) =>
+  /top_shirt/i.test(file) ? '#7f9c8a' : /top/i.test(file) ? '#5d84ad' : /slacks/i.test(file) ? '#3e4553' : /btm/i.test(file) ? '#5b5e4c'
+    : /runningshoes/i.test(file) ? '#e4e4e0' : /shs/i.test(file) ? '#2a2a2a' : '#888';
 const bedColour = (file: string) =>
   /mattress/i.test(file) ? mat('#f1eee7', 0.9) : /pillow/i.test(file) ? mat('#fbfbf8', 0.95) : /blanket_base/i.test(file) ? mat('#9b7b5b', 0.6) : /leg/i.test(file) ? mat('#6b5440', 0.5) : mat('#8a6a4a', 0.55);
 
-interface Rig {
-  root: THREE.Group; // FBX space container
-  person: THREE.Group;
+interface PersonRig {
+  group: THREE.Group;
   bones: Record<string, THREE.Bone>;
   boneList: (THREE.Bone | undefined)[];
   head?: THREE.Object3D;
+}
+
+interface Rig {
+  root: THREE.Group; // FBX space container
+  person: PersonRig;
+  helpers: PersonRig[];
   props: { obj: THREE.Object3D; idx: number }[];
 }
 
-const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
-  const sc = o.scene;
-  const base = o.rec.folder;
-  const root = new THREE.Group();
+/**
+ * Bones of a clothing/face mesh mapped onto the body's skeleton. Extra bones the body doesn't have
+ * (facial bones, cloth bones) are moved under the matching body bone so they follow it.
+ */
+const shareBones = (m: THREE.SkinnedMesh, bones: Record<string, THREE.Bone>) =>
+  m.skeleton.bones.map((b) => {
+    if (bones[b.name]) return bones[b.name];
+    const pn = b.parent?.name;
+    if (pn && bones[pn] && b.parent !== bones[pn]) bones[pn].add(b);
+    return b;
+  });
+
+/** A MetaHuman: body, clothes and face sharing one skeleton. */
+const buildPerson = async (spec: PersonSpec, base: string, root: THREE.Group): Promise<PersonRig> => {
+  const sc = { person: spec };
   const person = new THREE.Group();
   root.add(person);
 
@@ -68,7 +86,7 @@ const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
     g.traverse((x) => {
       const m = x as THREE.SkinnedMesh;
       if (!m.isSkinnedMesh) return;
-      m.bind(new THREE.Skeleton(m.skeleton.bones.map((b) => bones[b.name] ?? b), m.skeleton.boneInverses), m.bindMatrix);
+      m.bind(new THREE.Skeleton(shareBones(m, bones), m.skeleton.boneInverses), m.bindMatrix);
       m.material = mat(clothColour(f), 0.85);
       person.add(m);
     });
@@ -78,13 +96,7 @@ const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
   const faceMeshes: THREE.SkinnedMesh[] = [];
   face.traverse((x) => { if ((x as THREE.SkinnedMesh).isSkinnedMesh) faceMeshes.push(x as THREE.SkinnedMesh); });
   for (const m of faceMeshes) {
-    const nb = m.skeleton.bones.map((b) => {
-      if (bones[b.name]) return bones[b.name];
-      const pn = b.parent?.name;
-      if (pn && bones[pn] && b.parent !== bones[pn]) bones[pn].add(b);
-      return b;
-    });
-    m.bind(new THREE.Skeleton(nb, m.skeleton.boneInverses), m.bindMatrix);
+    m.bind(new THREE.Skeleton(shareBones(m, bones), m.skeleton.boneInverses), m.bindMatrix);
     const ms = Array.isArray(m.material) ? m.material : [m.material];
     const out = ms.map((mt) => {
       const n = mt.name || '';
@@ -116,6 +128,16 @@ const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
   }
   body.traverse((x) => { x.frustumCulled = false; });
   person.traverse((x) => { x.frustumCulled = false; if ((x as THREE.Mesh).isMesh) { x.castShadow = true; x.receiveShadow = true; } });
+  return { group: person, bones, boneList: BONES.map((b) => bones[b]), head: anchor };
+};
+
+const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
+  const sc = o.scene;
+  const base = o.rec.folder;
+  const root = new THREE.Group();
+  const person = await buildPerson(sc.person, base, root);
+  const helpers: PersonRig[] = [];
+  for (const h of sc.helpers ?? []) helpers.push(await buildPerson(h, base, root));
 
   // bed (static, Unreal world transforms)
   for (const part of sc.bed) {
@@ -137,10 +159,35 @@ const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
     root.add(holder);
     props.push({ obj: holder, idx: i });
   }
-  return { root, person, bones, boneList: BONES.map((b) => bones[b]), head: anchor, props };
+  return { root, person, helpers, props };
 };
 
 const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
+
+const posePerson = (p: PersonRig, spec: PersonSpec, anim: AnimData, t: number) => {
+  setUE(p.group, sampleTrack(spec.track, t));
+  const f = Math.max(0, Math.min(anim.frames - 1, t * spec.animFps));
+  const i0 = Math.floor(f), i1 = Math.min(anim.frames - 1, i0 + 1), a = f - i0;
+  const nb = BONES.length;
+  for (let b = 0; b < nb; b++) {
+    const bone = p.boneList[b];
+    if (!bone) continue;
+    const k0 = (i0 * nb + b) * 4, k1 = (i1 * nb + b) * 4;
+    qa.set(anim.quats[k0], -anim.quats[k0 + 1], anim.quats[k0 + 2], -anim.quats[k0 + 3]);
+    qb.set(anim.quats[k1], -anim.quats[k1 + 1], anim.quats[k1 + 2], -anim.quats[k1 + 3]);
+    bone.quaternion.slerpQuaternions(qa, qb, a).normalize();
+  }
+  for (const [k, name] of ['root', 'pelvis'].entries()) {
+    const bone = p.bones[name];
+    if (!bone) continue;
+    const p0 = i0 * 6 + k * 3, p1 = i1 * 6 + k * 3;
+    bone.position.set(
+      anim.trans[p0] + (anim.trans[p1] - anim.trans[p0]) * a,
+      -(anim.trans[p0 + 1] + (anim.trans[p1 + 1] - anim.trans[p0 + 1]) * a),
+      anim.trans[p0 + 2] + (anim.trans[p1 + 2] - anim.trans[p0 + 2]) * a,
+    );
+  }
+};
 
 export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { person?: { head: THREE.Object3D }; chair?: THREE.Object3D } }) => {
   const originalId = useStore((s) => s.project.activity.originalId);
@@ -159,7 +206,7 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
   }, [o, assetVersion]);
 
   useEffect(() => {
-    if (rig?.head) live.person = { head: rig.head };
+    if (rig?.person.head) live.person = { head: rig.person.head };
     live.chair = chair.root;
   }, [rig, chair, live]);
 
@@ -167,29 +214,9 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
     if (!o || !rig) return;
     const t = useStore.getState().time;
     const sc = o.scene;
-    // person: actor placement + recorded bones
-    setUE(rig.person, sampleTrack(sc.person.track, t));
-    const f = Math.max(0, Math.min(o.frames - 1, t * sc.person.animFps));
-    const i0 = Math.floor(f), i1 = Math.min(o.frames - 1, i0 + 1), a = f - i0;
-    const nb = BONES.length;
-    for (let b = 0; b < nb; b++) {
-      const bone = rig.boneList[b];
-      if (!bone) continue;
-      const k0 = (i0 * nb + b) * 4, k1 = (i1 * nb + b) * 4;
-      qa.set(o.quats[k0], -o.quats[k0 + 1], o.quats[k0 + 2], -o.quats[k0 + 3]);
-      qb.set(o.quats[k1], -o.quats[k1 + 1], o.quats[k1 + 2], -o.quats[k1 + 3]);
-      bone.quaternion.slerpQuaternions(qa, qb, a).normalize();
-    }
-    for (const [k, name] of ['root', 'pelvis'].entries()) {
-      const bone = rig.bones[name];
-      if (!bone) continue;
-      const p0 = i0 * 6 + k * 3, p1 = i1 * 6 + k * 3;
-      bone.position.set(
-        o.trans[p0] + (o.trans[p1] - o.trans[p0]) * a,
-        -(o.trans[p0 + 1] + (o.trans[p1 + 1] - o.trans[p0 + 1]) * a),
-        o.trans[p0 + 2] + (o.trans[p1 + 2] - o.trans[p0 + 2]) * a,
-      );
-    }
+    // people: Body placement + recorded bones
+    posePerson(rig.person, sc.person, o, t);
+    rig.helpers.forEach((h, i) => { const a = o.helpers[i]; if (a && sc.helpers?.[i]) posePerson(h, sc.helpers[i], a, t); });
     for (const p of rig.props) {
       const pr = sc.props[p.idx];
       setUE(p.obj, sampleTrack(pr.track, t), pr.scale ?? 1);

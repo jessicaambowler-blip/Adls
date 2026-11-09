@@ -3,8 +3,8 @@
 // Each recording lives in public/originals/<folder>/ (not committed to git – it contains
 // MetaHumans and research participants' motion capture) and consists of:
 //   scene.json  – where everything is over time (Unreal units: cm, Z up, left-handed)
-//   anim.z      – the person's recorded body movement (zlib, see tools/unreal/export_baked_anims.py)
-//   *.fbx       – the person's body, face and clothes; the bed parts; the hoist bar
+//   anim.z      – each person's recorded body movement (zlib, see tools/unreal/export_baked_anims.py)
+//   *.fbx       – each person's body, face and clothes; the bed parts; the hoist bar
 //
 // Coordinate conventions
 //   Unreal (X, Y, Z)  ->  plan mm  (X*10 + offset, Y*10 + offset)  ->  3D metres (x = X/100, y = Z/100, z = Y/100)
@@ -33,15 +33,21 @@ export const fetchBinary = async (url: string): Promise<ArrayBuffer> => {
 
 export interface Track { fps: number; frames: number; data: number[] }
 
+export interface PersonSpec {
+  label: string; body: string; face: string; clothes: string[]; anim: string; animFps: number;
+  /** world transform of the person's Body component over time */
+  track: Track;
+}
+
 export interface OriginalSceneData {
   id: string;
   title: string;
   duration: number;
   offsetCm: [number, number];
   room: [number, number];
-  person: {
-    label: string; body: string; face: string; clothes: string[]; anim: string; animFps: number; track: Track;
-  };
+  person: PersonSpec;
+  /** other people in the recording (e.g. a carer) */
+  helpers?: PersonSpec[];
   props: { label: string; file?: string; builtin?: string; scale?: number; track: Track }[];
   bed: { file: string; world: number[] }[];
   bedFootprint: { minX: number; maxX: number; minY: number; maxY: number; top: number };
@@ -62,7 +68,7 @@ export const ORIGINALS: OriginalRecording[] = [
     folder: 'originals/p2/',
     title: 'Persona 2 – hoist transfer to bed',
     short: 'Persona 2 · bed transfer',
-    blurb: 'Original VisADLs motion capture: wheeled to the bedside in a powered chair, then transferred to bed with a hoist (5 min).',
+    blurb: 'Original VisADLs motion capture: wheeled to the bedside in a powered chair, then transferred to bed with a hoist by a carer (5 min).',
   },
 ];
 
@@ -75,14 +81,19 @@ export const BONES = (() => {
     ...side.map((b) => `${b}_l`), ...side.map((b) => `${b}_r`)];
 })();
 
-export interface LoadedOriginal {
-  rec: OriginalRecording;
-  scene: OriginalSceneData;
+export interface AnimData {
   /** per frame: root xyz, pelvis xyz (Unreal, parent-relative) */
   trans: Float32Array;
   /** per frame: quaternion xyzw for each of BONES (Unreal, parent-relative) */
   quats: Float32Array;
   frames: number;
+}
+
+export interface LoadedOriginal extends AnimData {
+  rec: OriginalRecording;
+  scene: OriginalSceneData;
+  /** animation of each of scene.helpers, in the same order */
+  helpers: AnimData[];
 }
 
 const loaded = new Map<string, LoadedOriginal>();
@@ -95,6 +106,22 @@ export const originalAvailable = (id: string) => available.get(id) === true;
 const inflate = async (buf: ArrayBuffer) =>
   new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
 
+const loadAnim = async (url: string): Promise<AnimData> => {
+  const raw = await inflate(await fetchBinary(url));
+  const nb = BONES.length;
+  const frameBytes = 24 + nb * 8;
+  const frames = Math.floor(raw.byteLength / frameBytes);
+  const dv = new DataView(raw);
+  const trans = new Float32Array(frames * 6);
+  const quats = new Float32Array(frames * nb * 4);
+  for (let f = 0; f < frames; f++) {
+    const o = f * frameBytes;
+    for (let k = 0; k < 6; k++) trans[f * 6 + k] = dv.getFloat32(o + k * 4, true);
+    for (let b = 0; b < nb; b++) for (let k = 0; k < 4; k++) quats[(f * nb + b) * 4 + k] = dv.getInt16(o + 24 + b * 8 + k * 2, true) / 32767;
+  }
+  return { trans, quats, frames };
+};
+
 export const loadOriginal = (id: string): Promise<LoadedOriginal | null> => {
   const hit = loading.get(id);
   if (hit) return hit;
@@ -105,19 +132,9 @@ export const loadOriginal = (id: string): Promise<LoadedOriginal | null> => {
       const res = await fetch(`${rec.folder}scene.json`);
       if (!res.ok) throw new Error(String(res.status));
       const scene = (await res.json()) as OriginalSceneData;
-      const raw = await inflate(await fetchBinary(rec.folder + scene.person.anim));
-      const nb = BONES.length;
-      const frameBytes = 24 + nb * 8;
-      const frames = Math.floor(raw.byteLength / frameBytes);
-      const dv = new DataView(raw);
-      const trans = new Float32Array(frames * 6);
-      const quats = new Float32Array(frames * nb * 4);
-      for (let f = 0; f < frames; f++) {
-        const o = f * frameBytes;
-        for (let k = 0; k < 6; k++) trans[f * 6 + k] = dv.getFloat32(o + k * 4, true);
-        for (let b = 0; b < nb; b++) for (let k = 0; k < 4; k++) quats[(f * nb + b) * 4 + k] = dv.getInt16(o + 24 + b * 8 + k * 2, true) / 32767;
-      }
-      const l: LoadedOriginal = { rec, scene, trans, quats, frames };
+      const main = await loadAnim(rec.folder + scene.person.anim);
+      const helpers = await Promise.all((scene.helpers ?? []).map((h) => loadAnim(rec.folder + h.anim)));
+      const l: LoadedOriginal = { rec, scene, ...main, helpers };
       loaded.set(id, l);
       available.set(id, true);
       useStore.getState().bumpAssets();
