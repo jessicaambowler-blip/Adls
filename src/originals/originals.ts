@@ -54,6 +54,12 @@ export interface OriginalSceneData {
   helpers?: PersonSpec[];
   props: { label: string; file?: string; builtin?: string; scale?: number; track: Track }[];
   bed: { file: string; world: number[] }[];
+  /**
+   * Where the person ends up lying in the original bed, so the transfer can be fitted to any bed:
+   * lateral position (Unreal X) and head-end position (Unreal Y) of the original mattress, its top
+   * above the floor, its plan rotation, and the time window of the hoist transfer.
+   */
+  bedFit?: { lateralX: number; headEndY: number; topCm: number; rotation: number; transfer: [number, number] };
   bedFootprint: { minX: number; maxX: number; minY: number; maxY: number; top: number };
   phases: { t: number; label: string }[];
 }
@@ -186,3 +192,47 @@ export const toPlan = (scene: OriginalSceneData, X: number, Y: number) => ({
   x: (X + scene.offsetCm[0]) * 10,
   y: (Y + scene.offsetCm[1]) * 10,
 });
+
+// ------------------------------------------------------------------ fitting the transfer to the room's bed
+
+export interface BedFit {
+  /** anchor in the original bed (plan mm): lying position across the bed, at the head end */
+  from: { x: number; y: number };
+  /** the same anchor on the bed in the current layout */
+  to: { x: number; y: number };
+  /** extra rotation (degrees, clockwise in plan) */
+  turn: number;
+  /** change of mattress height (mm) */
+  lift: number;
+  transfer: [number, number];
+}
+
+/** Map the original lying spot onto a bed item (centre of its width, at its head end). */
+export const fitToBed = (scene: OriginalSceneData, bed: { x: number; y: number; w: number; d: number; h: number; rotation: number }): BedFit | undefined => {
+  const f = scene.bedFit;
+  if (!f) return undefined;
+  const from = toPlan(scene, f.lateralX, f.headEndY);
+  // head end of a bed item is its back (local -y)
+  const a = ((bed.rotation % 360) * Math.PI) / 180;
+  const to = { x: bed.x + (d0(bed) * Math.sin(a)), y: bed.y - d0(bed) * Math.cos(a) };
+  return { from, to, turn: bed.rotation - f.rotation, lift: bed.h - f.topCm * 10, transfer: f.transfer };
+};
+const d0 = (bed: { d: number }) => bed.d / 2;
+
+/** How far into the transfer (0 before the lift, 1 once over the bed), eased. */
+export const fitWeight = (fit: BedFit | undefined, t: number) => {
+  if (!fit) return 0;
+  const [a, b] = fit.transfer;
+  const u = Math.max(0, Math.min(1, (t - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
+
+/** Apply a (partial) bed fit to a plan point. */
+export const fitPoint = (fit: BedFit | undefined, w: number, p: { x: number; y: number }) => {
+  if (!fit || w <= 0) return p;
+  const ang = ((fit.turn * w) * Math.PI) / 180;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const dx = p.x - fit.from.x, dy = p.y - fit.from.y;
+  const ox = fit.from.x + (fit.to.x - fit.from.x) * w, oy = fit.from.y + (fit.to.y - fit.from.y) * w;
+  return { x: ox + dx * c - dy * s, y: oy + dx * s + dy * c };
+};

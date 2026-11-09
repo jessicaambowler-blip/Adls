@@ -185,14 +185,14 @@ export const cloneLayout = (l: Layout, name?: string): Layout => ({ ...JSON.pars
 export const originalRoomTemplate = (scene: OriginalSceneData): Layout => {
   const [W, D] = scene.room;
   const P = (X: number, Y: number) => ({ x: (X + scene.offsetCm[0]) * 10, y: (Y + scene.offsetCm[1]) * 10 });
-  const f = scene.bedFootprint;
-  // mattress & frame (the bounds also include the bedside tables, which are separate items)
-  const bedX0 = -65, bedX1 = 103, bedY0 = f.minY, bedY1 = f.maxY;
-  const c = P((bedX0 + bedX1) / 2, (bedY0 + bedY1) / 2);
-  const bed = makeItem('bed-queen', Math.round(c.x), Math.round(c.y), 180, {
-    w: Math.round((bedX1 - bedX0) * 10), d: Math.round((bedY1 - bedY0) * 10), h: 770, hidden3d: true, label: 'Original bed',
-  });
-  const t1 = P(134, 165), t2 = P(-96, 165);
+  // The recording's bed is replaced by a care bed from the catalogue, placed where she lay in the
+  // original (centred on her across its width, head end where the original head end was); the
+  // transfer is fitted to wherever this bed is moved (see fitToBed).
+  const fit = scene.bedFit ?? { lateralX: 18, headEndY: scene.bedFootprint.maxY, rotation: 180 };
+  const bedD = 2150, bedW = 1000;
+  const c = P(fit.lateralX, fit.headEndY - bedD / 20);
+  const bed = makeItem('bed-adjustable', Math.round(c.x), Math.round(c.y), fit.rotation, { label: 'Bed' });
+  const t1 = P(fit.lateralX + bedW / 20 + 30, fit.headEndY - 12), t2 = P(fit.lateralX - bedW / 20 - 30, fit.headEndY - 12);
   const walls = rectWalls(W, D);
   const start = P(scene.person.track.data[0], scene.person.track.data[1]);
   return base(`Original room – ${scene.person.label}`, {
@@ -200,8 +200,8 @@ export const originalRoomTemplate = (scene: OriginalSceneData): Layout => {
     openings: [{ ...door(walls[2], W / 2, 1200), kind: 'opening' as const }],
     items: [
       bed,
-      makeItem('bedside-table', Math.round(t1.x), Math.round(t1.y), 180, { w: 500, d: 350, hidden3d: true, label: 'Bedside table' }),
-      makeItem('bedside-table', Math.round(t2.x), Math.round(t2.y), 180, { w: 500, d: 350, hidden3d: true, label: 'Bedside table' }),
+      makeItem('bedside-table', Math.round(t1.x), Math.round(t1.y), 180),
+      makeItem('bedside-table', Math.round(t2.x), Math.round(t2.y), 180),
     ],
     floor: 'vinyl',
     wallColor: '#f1efe9',

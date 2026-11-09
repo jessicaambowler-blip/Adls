@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { BuiltActivity } from '../activities/activities';
-import { BONES, fetchBinary, getOriginal, sampleTrack, type AnimData, type LoadedOriginal, type PersonSpec } from '../originals/originals';
+import { BONES, fetchBinary, fitPoint, fitWeight, getOriginal, sampleTrack, type AnimData, type LoadedOriginal, type PersonSpec } from '../originals/originals';
 import { useStore } from '../model/store';
 import { buildPowerChair } from './wheelchair';
 
@@ -46,7 +46,8 @@ interface PersonRig {
 }
 
 interface Rig {
-  root: THREE.Group; // FBX space container
+  root: THREE.Group; // FBX space container: things that stay where they were recorded
+  fitted: THREE.Group; // FBX space container: the person and the hoist, bent onto the room's bed
   person: PersonRig;
   helpers: PersonRig[];
   props: { obj: THREE.Object3D; idx: number }[];
@@ -180,19 +181,11 @@ const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
   const sc = o.scene;
   const base = o.rec.folder;
   const root = new THREE.Group();
-  const person = await buildPerson(sc.person, base, root);
+  const fitted = new THREE.Group();
+  const person = await buildPerson(sc.person, base, fitted);
   const helpers: PersonRig[] = [];
   for (const h of sc.helpers ?? []) helpers.push(await buildPerson(h, base, root));
-
-  // bed (static, Unreal world transforms)
-  for (const part of sc.bed) {
-    const g = await loadFbx(base + part.file);
-    const holder = new THREE.Group();
-    setUE(holder, part.world, part.world[7] ?? 1);
-    g.traverse((x) => { if ((x as THREE.Mesh).isMesh) { (x as THREE.Mesh).material = bedColour(part.file); x.castShadow = true; x.receiveShadow = true; } });
-    holder.add(g);
-    root.add(holder);
-  }
+  // (the recording's own bed is not shown: the room's bed is used instead)
   // moving props with their own model (hoist bar)
   const props: Rig['props'] = [];
   for (const [i, p] of sc.props.entries()) {
@@ -201,10 +194,10 @@ const buildRig = async (o: LoadedOriginal): Promise<Rig> => {
     g.traverse((x) => { if ((x as THREE.Mesh).isMesh) { (x as THREE.Mesh).material = mat('#d7dbe0', 0.35, 0.6); x.castShadow = true; } });
     const holder = new THREE.Group();
     holder.add(g);
-    root.add(holder);
+    fitted.add(holder);
     props.push({ obj: holder, idx: i });
   }
-  return { root, person, helpers, props };
+  return { root, fitted, person, helpers, props };
 };
 
 const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
@@ -241,6 +234,7 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
   const [rig, setRig] = useState<Rig | null>(null);
 
   const chair = useMemo(() => buildPowerChair('#3a4250'), []);
+  const fitRef = useMemo(() => new THREE.Group(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,6 +260,17 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
       const pr = sc.props[p.idx];
       setUE(p.obj, sampleTrack(pr.track, t), pr.scale ?? 1);
     }
+    // bend the person and the hoist onto the room's bed during the transfer
+    const fit = built.bedFit;
+    const w = fitWeight(fit, t);
+    if (fit && w > 0) {
+      const a = fitPoint(fit, w, { x: 0, y: 0 });
+      fitRef.position.set(a.x / 1000, (fit.lift * w) / 1000, a.y / 1000);
+      fitRef.rotation.y = THREE.MathUtils.degToRad(-fit.turn * w);
+    } else {
+      fitRef.position.set(0, 0, 0);
+      fitRef.rotation.y = 0;
+    }
     // the app's powered wheelchair follows the original wheelchair's path
     const c = built.chair(t);
     chair.root.position.set(c.x / 1000, 0, c.y / 1000);
@@ -279,11 +284,20 @@ export const OriginalActors = ({ built, live }: { built: BuiltActivity; live: { 
     <>
       <primitive object={chair.root} />
       {rig && (
-        <group position={[off[0] / 100, 0, off[1] / 100]}>
-          <group position-y={-(o.scene.floorZ ?? 0) / 100} rotation-x={-Math.PI / 2} scale={0.01}>
-            <primitive object={rig.root} />
+        <>
+          <group position={[off[0] / 100, 0, off[1] / 100]}>
+            <group position-y={-(o.scene.floorZ ?? 0) / 100} rotation-x={-Math.PI / 2} scale={0.01}>
+              <primitive object={rig.root} />
+            </group>
           </group>
-        </group>
+          <primitive object={fitRef}>
+            <group position={[off[0] / 100, 0, off[1] / 100]}>
+              <group position-y={-(o.scene.floorZ ?? 0) / 100} rotation-x={-Math.PI / 2} scale={0.01}>
+                <primitive object={rig.fitted} />
+              </group>
+            </group>
+          </primitive>
+        </>
       )}
     </>
   );

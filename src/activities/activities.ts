@@ -1,7 +1,7 @@
 import { CHAIRS } from '../model/catalogue';
 import { add, headingOf, itemToPlan, rotate } from '../model/geometry';
 import { chairFootprint, obstaclesOf, planRoute, sampleAt, type RouteResult } from '../model/pathfinding';
-import { getOriginal, sampleTrack, toPlan, ueYaw } from '../originals/originals';
+import { fitPoint, fitToBed, fitWeight, getOriginal, sampleTrack, toPlan, ueYaw, type BedFit } from '../originals/originals';
 import { polygonsOverlap } from '../model/geometry';
 import type { ActivitySettings, ActivityType, Item, Layout, Vec2 } from '../model/types';
 import {
@@ -44,6 +44,8 @@ export interface BuiltActivity {
   problem?: string;
   /** which side the chair parks on (after 'auto' has been resolved) */
   side?: 'left' | 'right';
+  /** original recordings: how the transfer is fitted to the bed in this layout */
+  bedFit?: BedFit;
 }
 
 const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -131,13 +133,21 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
       const moving = fi > 0 && Math.abs(travelled[fi] - travelled[Math.max(0, fi - 1)]) > 1;
       return { x: p.x, y: p.y, heading: headingOf(fwd), wheelTurn: travelled[fi] ?? 0, moving };
     };
+    // the recording's bed is replaced by the bed in this layout; the transfer is bent to land on it
+    const bed = layout.items.find((i) => i.id === layout.targetItemId && i.kind.startsWith('bed'))
+      ?? layout.items.find((i) => i.kind.startsWith('bed') && i.kind !== 'bedside-table');
+    const bedFit = bed ? fitToBed(sc, bed) : undefined;
     const person = (t: number): BodyState => {
       const s = sampleTrack(sc.person.track, t);
-      const p = toPlan(sc, s[0], s[1]);
+      const w = fitWeight(bedFit, t);
+      const p = fitPoint(bedFit, w, toPlan(sc, s[0], s[1]));
       const c = chairAt(t);
-      return { x: p.x, y: p.y, z: s[2] * 10, heading: c.heading, pitch: 0, pose: fullPose(SEATED) };
+      return { x: p.x, y: p.y, z: s[2] * 10 + (bedFit ? bedFit.lift * w : 0), heading: c.heading, pitch: 0, pose: fullPose(SEATED) };
     };
-    return { type, duration: sc.duration, phases: sc.phases, chair: chairAt, person };
+    return {
+      type, duration: sc.duration, phases: sc.phases, chair: chairAt, person, bedFit, target: bed,
+      problem: bed ? undefined : 'There is no bed in this room, so the transfer has nowhere to land. Add a bed from the furniture list.',
+    };
   }
 
   if (type === 'imported') {
