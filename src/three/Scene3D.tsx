@@ -22,7 +22,6 @@ import { OriginalActors } from './OriginalActors';
 import { PersonaActors } from './PersonaActors';
 import { getOriginal, originalMissing } from '../originals/originals';
 import { P2_ID } from '../activities/activities';
-import { StopBanner } from '../ui/StopBanner';
 import { itemToPlan } from '../model/geometry';
 
 const P = (x: number, y: number, h = 0) => new THREE.Vector3(x / 1000, h / 1000, y / 1000);
@@ -103,7 +102,7 @@ const Walls = ({ layout }: { layout: Layout }) => {
     }
   });
   return (
-    <group ref={group}>
+    <group ref={group} name="walls">
       {builds.map((w) => (
         <group key={w.wall.id}>
           <primitive object={w.full} />
@@ -291,6 +290,30 @@ const ActivityProps = ({ built }: { built: BuiltActivity }) => {
   return <>{doors.map((d, i) => <group key={i}><primitive object={d.base} /><primitive object={d.cavity} /></group>)}</>;
 };
 
+/** A soft red glow under the wheelchair while its outline overlaps a wall or furniture. */
+const ChairOverlap = ({ route, width, length }: { route: NonNullable<BuiltActivity['route']>; width: number; length: number }) => {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    const m = ref.current;
+    if (!m) return;
+    const t = useStore.getState().time;
+    const ss = route.samples;
+    let lo = 0, hi = ss.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ss[mid].t <= t) lo = mid; else hi = mid - 1; }
+    const s = ss[lo];
+    m.visible = !!s?.hit;
+    if (!s) return;
+    m.position.set(s.x / 1000, 0.012, s.y / 1000);
+    m.rotation.set(-Math.PI / 2, 0, -THREE.MathUtils.degToRad(s.heading));
+  });
+  return (
+    <mesh ref={ref} visible={false}>
+      <planeGeometry args={[width / 1000 + 0.12, length / 1000 + 0.12]} />
+      <meshBasicMaterial color="#e53935" transparent opacity={0.28} depthWrite={false} />
+    </mesh>
+  );
+};
+
 const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: ActivitySettings }) => {
   const route = built.route;
   const labels = useStore((s) => s.showLabels);
@@ -301,13 +324,13 @@ const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: Act
   const line = useMemo(() => (route ? route.samples.filter((_, i) => i % 3 === 0).map((s) => [s.x / 1000, 0.015, s.y / 1000] as [number, number, number]) : []), [route]);
   const prints = useMemo(() => {
     if (!route || !settings.showSweptPath) return [];
-    const out: [number, number, number][][] = [];
+    const out: { pts: [number, number, number][]; hit: boolean }[] = [];
     let last = -1e9;
     for (const s of route.samples) {
       if (s.dist - last < 220 && s !== route.samples[route.samples.length - 1]) continue;
       last = s.dist;
       const fp = chairFootprint(s, C.width, C.length);
-      out.push([...fp, fp[0]].map((p) => [p.x / 1000, 0.01, p.y / 1000]));
+      out.push({ pts: [...fp, fp[0]].map((p) => [p.x / 1000, 0.01, p.y / 1000]), hit: !!s.hit });
     }
     return out;
   }, [route, settings.showSweptPath, C.width, C.length]);
@@ -315,15 +338,8 @@ const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: Act
   return (
     <group>
       <Line points={line} color="#1e88e5" lineWidth={3} dashed dashSize={0.12} gapSize={0.06} />
-      {prints.map((p, i) => <Line key={i} points={p} color="#1e88e5" transparent opacity={0.22} lineWidth={1} />)}
-      {built.stopped && (
-        <group position={[built.stopped.at.x / 1000, 0.025, built.stopped.at.y / 1000]}>
-          <mesh rotation-x={-Math.PI / 2}>
-            <ringGeometry args={[0.35, 0.45, 48]} />
-            <meshBasicMaterial color="#b71c1c" />
-          </mesh>
-        </group>
-      )}
+      {prints.map((p, i) => <Line key={i} points={p.pts} color={p.hit ? '#e53935' : '#1e88e5'} transparent opacity={p.hit ? 0.55 : 0.22} lineWidth={p.hit ? 2 : 1} />)}
+      <ChairOverlap route={route} width={C.width} length={C.length} />
       {route.contacts.map((c, i) => (
         <group key={i} position={[c.at.x / 1000, 0.02, c.at.y / 1000]}>
           <mesh rotation-x={-Math.PI / 2}>
@@ -363,13 +379,56 @@ const Pins = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 
 // ---------------------------------------------------------------- camera
 
+// keys held for moving the 3D camera (W A S D / arrows, Q E turn, R F up/down, Shift faster)
+const held = new Set<string>();
+if (typeof window !== 'undefined') {
+  const typing = (e: KeyboardEvent) => { const t = (e.target as HTMLElement)?.tagName; return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT'; };
+  window.addEventListener('keydown', (e) => {
+    if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    const st = useStore.getState();
+    // arrow keys move a selected wall/item instead; drawing tools keep the keyboard for lengths
+    if (e.key.startsWith('Arrow') && st.selection) return;
+    if (st.tool !== 'select' && st.tool !== 'move-plan') return;
+    if (st.viewMode === 'plan') return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (['w', 'a', 's', 'd', 'q', 'e', 'r', 'f', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) {
+      if (k === 'r' && st.selection) return; // R rotates a selected item
+      held.add(k);
+      if (k.startsWith('Arrow')) e.preventDefault();
+    }
+    if (e.key === 'Shift') held.add('shift');
+  });
+  window.addEventListener('keyup', (e) => { held.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key); if (e.key === 'Shift') held.delete('shift'); });
+  window.addEventListener('blur', () => held.clear());
+}
+
+/** Keep a camera on the near side of any wall between it and what it looks at. */
+const ray = new THREE.Raycaster();
+const keepInFront = (scene: THREE.Object3D, target: THREE.Vector3, eye: THREE.Vector3) => {
+  const walls = scene.getObjectByName('walls');
+  if (!walls) return eye;
+  const dir = eye.clone().sub(target);
+  const len = dir.length();
+  if (len < 0.05) return eye;
+  ray.set(target, dir.divideScalar(len));
+  ray.far = len;
+  const hit = ray.intersectObject(walls, true).find((h) => (h.object as THREE.Mesh).visible && h.object.parent?.visible !== false);
+  if (!hit) return eye;
+  if (hit.distance > 1.1) return target.clone().addScaledVector(ray.ray.direction, hit.distance - 0.15);
+  // too cramped behind (e.g. in a doorway): look down from above and just behind instead
+  const back = ray.ray.direction.clone().setY(0);
+  if (back.lengthSq() < 1e-6) back.set(0, 0, 1);
+  return target.clone().addScaledVector(back.normalize(), 0.5).add(new THREE.Vector3(0, 1.9, 0));
+};
+
 const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivity; live: Live }) => {
   const controls = useRef<OrbitControlsImpl>(null);
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
   const preset = useStore((s) => s.camera);
   const nonce = useStore((s) => s.cameraNonce);
   const anim = useRef<{ from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; k: number } | null>(null);
   const tmp = useMemo(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3() }), []);
+  const lastPerson = useRef<THREE.Vector3 | null>(null);
   const follow = preset === 'seated' || preset === 'support' || preset === 'follow';
 
   const b = layoutBounds({ ...layout, items: [] });
@@ -377,21 +436,20 @@ const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivi
   const size = Math.max(b.maxX - b.minX, b.maxY - b.minY) / 1000;
 
   useEffect(() => {
-    if (follow) { anim.current = null; return; }
+    lastPerson.current = null;
+    if (follow || preset === 'free') { anim.current = null; return; }
     let pos: THREE.Vector3, target: THREE.Vector3;
     if (preset === 'top') {
       target = centre.clone().setY(0);
       pos = centre.clone().add(new THREE.Vector3(0, size * 1.55 + 2.5, 0.01));
     } else if (preset === 'closeup') {
-      const t = useStore.getState().time;
-      const c = built.chair(t);
-      const pk = built.parking ?? { x: c.x, y: c.y, heading: c.heading };
-      target = P(pk.x, pk.y, 650);
-      // look from the open part of the room towards the activity
-      const toC = new THREE.Vector3(centre.x - pk.x / 1000, 0, centre.z - pk.y / 1000);
+      // start near the person now; the view then follows them (and can still be orbited)
+      const p = built.person(useStore.getState().time);
+      target = P(p.x, p.y, 650);
+      const toC = new THREE.Vector3(centre.x - p.x / 1000, 0, centre.z - p.y / 1000);
       if (toC.length() < 0.3) toC.set(1, 0, 1);
       toC.normalize();
-      pos = target.clone().addScaledVector(toC, 2.2).setY(2.1);
+      pos = target.clone().addScaledVector(toC, 2.4).setY(2.0);
     } else {
       target = centre.clone();
       pos = centre.clone().add(new THREE.Vector3(-size * 0.35, size * 0.85 + 2.2, size * 0.75 + 1.8));
@@ -410,6 +468,36 @@ const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivi
   useFrame((_, dt) => {
     const ctl = controls.current;
     if (!ctl) return;
+    // keyboard movement: switches to "Walk around" and moves the camera and what it looks at together
+    if (held.size && !(held.size === 1 && held.has('shift'))) {
+      if (useStore.getState().camera !== 'free') { anim.current = null; useStore.setState({ camera: 'free' }); }
+      // faster when looking at the whole house from far away
+      const reach = Math.max(1, camera.position.distanceTo(ctl.target));
+      const speed = Math.max(2.2, reach * 0.7) * (held.has('shift') ? 2.5 : 1) * Math.min(dt, 0.05);
+      const fwd = tmp.a.subVectors(ctl.target, camera.position).setY(0);
+      if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+      fwd.normalize();
+      const right = tmp.b.set(-fwd.z, 0, fwd.x);
+      const mv = tmp.c.set(0, 0, 0);
+      if (held.has('w') || held.has('ArrowUp')) mv.add(fwd);
+      if (held.has('s') || held.has('ArrowDown')) mv.sub(fwd);
+      if (held.has('d') || held.has('ArrowRight')) mv.add(right);
+      if (held.has('a') || held.has('ArrowLeft')) mv.sub(right);
+      if (mv.lengthSq() > 0) mv.normalize().multiplyScalar(speed);
+      if (held.has('r')) mv.y += speed;
+      if (held.has('f')) mv.y -= speed;
+      camera.position.add(mv);
+      ctl.target.add(mv);
+      if (camera.position.y < 0.3) { const d = 0.3 - camera.position.y; camera.position.y += d; ctl.target.y += d; }
+      const turn = ((held.has('e') ? 1 : 0) - (held.has('q') ? 1 : 0)) * 1.3 * Math.min(dt, 0.05);
+      if (turn) {
+        // turn on the spot: swing what we look at around the camera
+        const v = tmp.d.subVectors(ctl.target, camera.position).applyAxisAngle(new THREE.Vector3(0, 1, 0), -turn);
+        ctl.target.copy(camera.position).add(v);
+      }
+      ctl.update();
+      return;
+    }
     ctl.enabled = !follow;
     if (anim.current) {
       const a = anim.current;
@@ -421,8 +509,21 @@ const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivi
       ctl.update();
       return;
     }
-    if (!follow) return;
     const t = useStore.getState().time;
+    if (preset === 'closeup') {
+      // carry the view along with the person, keeping whatever angle the user has orbited to
+      const p = built.person(t);
+      const now = P(p.x, p.y, 650);
+      if (lastPerson.current) {
+        const d = tmp.a.subVectors(now, lastPerson.current);
+        camera.position.add(d);
+        ctl.target.add(d);
+        ctl.update();
+      }
+      lastPerson.current = now.clone();
+      return;
+    }
+    if (!follow) return;
     const smooth = 1 - Math.pow(0.0005, dt);
     if (preset === 'seated' && live.person) {
       const head = live.person.head;
@@ -433,24 +534,31 @@ const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivi
       camera.position.lerp(hp, smooth);
       ctl.target.lerp(tmp.c.copy(hp).addScaledVector(fwd.normalize(), 2), smooth);
     } else if (preset === 'support') {
+      const p = built.person(t);
+      const look = P(p.x, p.y, p.z + 100);
       let eye: THREE.Vector3;
       if (live.helper) {
+        // just behind and above the carer's head, so her own body doesn't fill the view
         live.helper.head.updateWorldMatrix(true, false);
-        eye = live.helper.head.localToWorld(tmp.a.set(0, 0.11, 0.1));
+        const h = live.helper.head.getWorldPosition(tmp.a);
+        const away = tmp.b.subVectors(h, look).setY(0);
+        if (away.lengthSq() < 1e-4) away.set(0, 0, 1);
+        away.normalize();
+        eye = h.clone().addScaledVector(away, 0.45).add(new THREE.Vector3(0, 0.15, 0));
       } else {
         const c = built.chair(t);
         const off = rotate({ x: -900, y: -1100 }, c.heading);
         eye = P(c.x + off.x, c.y + off.y, 1600);
       }
-      const p = built.person(t);
-      camera.position.lerp(eye, smooth);
-      ctl.target.lerp(P(p.x, p.y, p.z + 100), smooth);
+      camera.position.lerp(keepInFront(scene, look, eye), smooth);
+      ctl.target.lerp(look, smooth);
     } else if (preset === 'follow') {
       const c = built.chair(t);
       const back = rotate({ x: 0, y: -2300 }, c.heading);
-      camera.position.lerp(P(c.x + back.x, c.y + back.y, 1750), smooth);
       const p = built.person(t);
-      ctl.target.lerp(P(p.x, p.y, 700), smooth);
+      const look = P(p.x, p.y, 700);
+      camera.position.lerp(keepInFront(scene, look, P(c.x + back.x, c.y + back.y, 1750)), smooth);
+      ctl.target.lerp(look, smooth);
     }
     camera.lookAt(ctl.target);
   });
@@ -516,7 +624,6 @@ export const Scene3D = ({ layoutKey, label }: { layoutKey: LayoutKey; label?: st
         </Suspense>
       </Canvas>
       {label && <div className={`scene-label ${layoutKey}`}>{label}</div>}
-      <StopBanner layoutKey={layoutKey} />
       <PersonaLoading />
     </div>
   );

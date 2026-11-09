@@ -338,3 +338,4 @@ button.wide { width: 100%; margin-bottom: 10px; }
 button.linklike { background: none; border: none; color: var(--accent); padding: 4px 0; min-height: 0; text-decoration: underline; font-size: 13px; }
 .verify-flag { top: auto !important; bottom: 34px; left: 8px; right: auto; }
 .floor-fill.over-plan { fill-opacity: 0.35; }
+.swept.hit { fill: rgba(229, 57, 53, 0.12); stroke: rgba(229, 57, 53, 0.6); }

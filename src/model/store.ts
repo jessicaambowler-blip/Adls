@@ -11,7 +11,7 @@ export type Selection =
   | { type: 'end' }
   | null;
 
-export type CameraPreset = 'overview' | 'top' | 'seated' | 'support' | 'follow' | 'closeup';
+export type CameraPreset = 'overview' | 'top' | 'seated' | 'support' | 'follow' | 'closeup' | 'free';
 export type ViewMode = 'split' | '3d' | 'plan';
 export type WallMode = 'cutaway' | 'full' | 'low';
 export type Tool = 'select' | 'draw-room' | 'draw-wall' | 'add-room' | 'split-wall' | 'add-label' | 'move-plan' | 'calibrate' | 'pin-note' | 'detect-area';

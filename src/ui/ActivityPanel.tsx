@@ -27,9 +27,9 @@ export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layou
       <b>{name}: </b>
       {r.status === 'clear' && <>A route was found for a {C.width} mm wide chair. At its narrowest the route leaves roughly <b>{Math.max(0, r.minSideClearance)} mm</b> each side.</>}
       {r.status === 'tight' && <>The route is <b>tight</b>{r.minSideClearance > 0 && r.minSideClearance < 999 && <> – roughly {r.minSideClearance} mm each side at the narrowest point</>}.{contacts.length > 0 && <> The chair would bump the <b>{contacts.join(', ')}</b> (red rings) – could these be moved?</>}</>}
-      {built.stopped && <>⛔ <b>The chair can’t get through.</b> It stops at {built.stopped.where} (marked ✕ on the plan). Try a wider door, moving the wall, or a different route.</>}
-      {r.status === 'blocked' && !built.stopped && <>No route could be found for a {C.width} mm wide chair. The animation shows the chair passing through obstacles so you can see where.</>}
-      {built.problem && !built.stopped && <div className="problem">⚠ {built.problem}</div>}
+      {built.narrow && <div className="problem">⚠ <b>Too narrow at {built.narrow.where}.</b> The chair outline overlaps the frame there (shown in red on the plan). The animation carries on so you can see the rest.</div>}
+      {r.status === 'blocked' && <>No route could be found for a {C.width} mm wide chair. The animation shows the chair passing through obstacles so you can see where.</>}
+      {built.problem && <div className="problem">⚠ {built.problem}</div>}
       {unverified && <div className="problem">⚠ Room measurements came from automatic detection and have not been checked yet.</div>}
       <div className="small">Travel takes about {r.duration.toFixed(0)} s in this animation.</div>
     </div>

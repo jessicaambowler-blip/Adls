@@ -66,8 +66,8 @@ export interface BuiltActivity {
   mh?: { person: (t: number) => Mix; carer?: (t: number) => Mix; hoist?: (t: number) => Mix; mirrored?: boolean; recorded?: boolean };
   /** things that move during the activity (cupboard doors) */
   props?: ActivityProp[];
-  /** the chair could not get past a wall: where and when it stopped */
-  stopped?: { at: Vec2; t: number; where: string };
+  /** where the chair is too wide for the space (e.g. a doorway) – shown, but it still carries on */
+  narrow?: { at: Vec2; t: number; where: string };
 }
 
 const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -169,6 +169,12 @@ const findTarget = (layout: Layout, kinds: string[]): Item | undefined => {
 
 /** Build the full timeline for the chosen activity in a layout. */
 export const buildActivity = (layout: Layout, settings: ActivitySettings, importedDuration = 0): BuiltActivity => {
+  const b = buildActivityInner(layout, settings, importedDuration);
+  const n = b.route?.narrow;
+  return n ? { ...b, narrow: { ...n, where: describeStop(layout, n.at) } } : b;
+};
+
+const buildActivityInner = (layout: Layout, settings: ActivitySettings, importedDuration = 0): BuiltActivity => {
   const C = CHAIRS[settings.chair];
   const scale = settings.persona.heightCm / 175;
   const manual = settings.chair === 'manual';
@@ -326,10 +332,9 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
   if (park) goal = park;
   route ??= routeTo(goal);
 
-  // if a wall is in the way the chair stops just before it (and the activity ends there)
-  const T0 = route.stop?.t ?? route.duration;
+  const T0 = route.duration;
   const chairAt = (t: number): ChairState => {
-    const p = sampleAt(route.samples, Math.min(t, T0));
+    const p = sampleAt(route.samples, t);
     return { x: p.x, y: p.y, heading: p.heading, wheelTurn: p.dist, moving: t > 0 && t < T0 };
   };
   const parked = chairAt(T0);
@@ -356,22 +361,6 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
   };
   // ... then easing into the app's poses for the activity itself
   const p2Mix = (t: number): Mix => (t < T0 ? { a: seatedLoop(t), w: 0 } : { a: seatedLoop(T0), b: { kind: 'pose' }, w: ease((t - T0) / 0.8) });
-
-  if (route.stop) {
-    const stop = route.stop;
-    const where = describeStop(layout, stop.at);
-    const duration = T0 + 3;
-    // show the route only as far as it gets
-    const shown: RouteResult = { ...route, samples: route.samples.filter((x) => x.t <= T0 + 0.6), contacts: route.contacts.filter((c) => c.t <= T0 + 0.6), duration: T0 };
-    return {
-      type, duration, route: shown, target,
-      phases: [{ t: 0, label: 'Approach' }, { t: T0, label: 'Can’t get past' }],
-      problem: `The ${C.label.toLowerCase()} (${C.width} mm wide, ${C.length} mm long) can’t get past ${where}, so the activity stops there.`,
-      stopped: { at: stop.at, t: T0, where },
-      chair: chairAt, person: personTravel, helper: settings.supportPerson ? helperFollow : undefined,
-      mh: p2 ? { person: (t) => ({ a: seatedLoop(t), w: 0 }) } : undefined,
-    };
-  }
 
   if (!target || type === 'navigate') {
     const duration = T0 + 1.5;

@@ -8,7 +8,8 @@ const CAMERAS: { value: CameraPreset; label: string; title: string }[] = [
   { value: 'seated', label: 'Seated eye level', title: 'What the person in the wheelchair sees' },
   { value: 'support', label: 'Support person', title: 'Standing eye level' },
   { value: 'follow', label: 'Follow', title: 'Follow behind the wheelchair' },
-  { value: 'closeup', label: 'Close-up', title: 'Close view of where the activity happens' },
+  { value: 'closeup', label: 'Close-up', title: 'Close view that follows the person' },
+  { value: 'free', label: 'Walk around', title: 'Move freely: W A S D or arrow keys to move, Q / E to turn, R / F up and down, Shift to go faster. Drag to look around.' },
 ];
 
 export const Timeline = () => {

@@ -9,7 +9,6 @@ import { chairFootprint } from '../model/pathfinding';
 import { useStore } from '../model/store';
 import { askValue } from './dialogs';
 import { toggleLabels } from './Timeline';
-import { StopBanner } from './StopBanner';
 import { planPixels, runDetection } from './detectFlow';
 import { snapToPlan, type PlanPixels } from '../model/planSnap';
 import type { Item, Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
@@ -535,12 +534,12 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const route = settings.type !== 'imported' ? built.route : undefined;
   const prints = useMemo(() => {
     if (!route || !settings.showSweptPath) return [];
-    const out: Vec2[][] = [];
+    const out: { poly: Vec2[]; hit: boolean }[] = [];
     let last = -1e9;
     for (const s of route.samples) {
       if (s.dist - last < 200) continue;
       last = s.dist;
-      out.push(chairFootprint(s, C.width, C.length));
+      out.push({ poly: chairFootprint(s, C.width, C.length), hit: !!s.hit });
     }
     return out;
   }, [route, settings.showSweptPath, C.width, C.length]);
@@ -627,7 +626,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           : (() => { const b = layoutBounds({ ...layout, items: [] }); return <rect x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} className={`floor-fill ${bg ? 'over-plan' : ''}`} pointerEvents="none" />; })())}
 
         {/* swept path */}
-        {prints.map((p, i) => <polygon key={i} points={pts(p)} className="swept" pointerEvents="none" />)}
+        {prints.map((p, i) => <polygon key={i} points={pts(p.poly)} className={`swept ${p.hit ? 'hit' : ''}`} pointerEvents="none" />)}
         {route && <polyline points={pts(route.samples.filter((_, i) => i % 4 === 0))} className="route" pointerEvents="none" />}
         {built.parking && <polygon points={pts(chairFootprint(built.parking, C.width, C.length))} className="parking" pointerEvents="none" />}
 
@@ -745,14 +744,6 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           );
         })}
 
-        {/* where the chair can't get past a wall */}
-        {built.stopped && (
-          <g pointerEvents="none" className="stop-mark">
-            <circle cx={built.stopped.at.x} cy={built.stopped.at.y} r={420} />
-            <line x1={built.stopped.at.x - 250} y1={built.stopped.at.y - 250} x2={built.stopped.at.x + 250} y2={built.stopped.at.y + 250} />
-            <line x1={built.stopped.at.x + 250} y1={built.stopped.at.y - 250} x2={built.stopped.at.x - 250} y2={built.stopped.at.y + 250} />
-          </g>
-        )}
         {/* contacts */}
         {route?.contacts.map((c, i) => <circle key={i} cx={c.at.x} cy={c.at.y} r={220} className="contact" pointerEvents="none" />)}
 
@@ -873,7 +864,6 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           {tool === 'detect-area' && !detecting && 'Drag a box around the floor you want to turn into 3D. (Esc to cancel)'}
         </div>
       )}
-      <StopBanner layoutKey={layoutKey} />
       <div className="plan-legend">
         <span><i className="lg route" /> route</span>
         {settings.showSweptPath && <span><i className="lg swept" /> space used by chair</span>}

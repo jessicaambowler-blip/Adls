@@ -151,7 +151,7 @@ export const Help = () => {
           <li><b>Notes</b> – record concerns, preferences and decisions as you go. “Summary” makes a printable record.</li>
         </ol>
         <h3>Keyboard</h3>
-        <p>Space: play/pause · Arrow keys: nudge selected item (Shift = 100 mm) · R: rotate 90° · Delete: remove · Ctrl+Z / Ctrl+Y: undo / redo</p>
+        <p>Space: play/pause · 3D view: W A S D or arrow keys to move, Q / E to turn, R / F up and down, Shift faster, drag to look around · With something selected: arrow keys nudge it (Shift = 100 mm), R rotates 90°, Delete removes it · Ctrl+Z / Ctrl+Y: undo / redo</p>
         <h3>Please remember</h3>
         {HOSTED && <p className="muted">You are using the online preview: your work is kept in this browser only. To keep a copy, use the installed version, which can save project files.</p>}
         <p className="caveat">This is a research prototype for discussion. It does not check compliance with standards and is not a substitute for clinical reasoning or on-site measurement. Persona 2's driving and hoist transfer are recorded VisADLs motion capture; other movements are demonstrations made by the app.</p>
