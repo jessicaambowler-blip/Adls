@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { cloneLayout, defaultProject } from './templates';
-import type { ActivitySettings, Layout, LayoutKey, Note, Project } from './types';
+import type { ActivitySettings, Item, ItemKind, Layout, LayoutKey, Note, Opening, Project } from './types';
 
 export type Selection =
   | { type: 'item'; id: string }
@@ -11,10 +11,16 @@ export type Selection =
   | { type: 'end' }
   | null;
 
+/** Something waiting to be put down with a click (on the plan or in 3D). */
+export type Placing =
+  | { what: 'item'; kind: ItemKind; over?: Partial<Item>; label: string }
+  | { what: 'opening'; kind: Opening['kind']; width?: number; label: string }
+  | { what: 'template'; id: string; label: string };
+
 export type CameraPreset = 'overview' | 'top' | 'seated' | 'support' | 'follow' | 'closeup' | 'free';
 export type ViewMode = 'split' | '3d' | 'plan';
 export type WallMode = 'cutaway' | 'full' | 'low';
-export type Tool = 'select' | 'draw-room' | 'draw-wall' | 'add-room' | 'split-wall' | 'add-label' | 'move-plan' | 'calibrate' | 'pin-note' | 'detect-area';
+export type Tool = 'select' | 'draw-room' | 'draw-wall' | 'add-room' | 'split-wall' | 'add-label' | 'move-plan' | 'place' | 'calibrate' | 'pin-note' | 'detect-area';
 
 /** Walls/openings proposed by automatic detection, waiting for review (plan mm). */
 export interface DetectionProposal {
@@ -33,6 +39,14 @@ interface UiState {
   cameraNonce: number;
   wallMode: WallMode;
   highQuality: boolean;
+  /** what the Place tool puts down at the next click */
+  placing?: Placing;
+  /** "Align to grid" step for moving and drawing (mm) */
+  gridMm: number;
+  /** show the measuring grid on the 3D floor */
+  grid3d: boolean;
+  /** furniture is being dragged in 3D (orbiting pauses) */
+  dragging3d?: boolean;
   /** names and measurements on the plan, and contact tags in 3D (the selected thing always shows its own) */
   showLabels: boolean;
   tool: Tool;
@@ -102,6 +116,8 @@ export const useStore = create<State>((set, get) => ({
   cameraNonce: 0,
   wallMode: 'cutaway',
   highQuality: true,
+  gridMm: 50,
+  grid3d: true,
   showLabels: (() => { try { return localStorage.getItem('visadls-labels') !== 'off'; } catch { return true; } })(),
   tool: 'select',
   time: 0,

@@ -1,4 +1,4 @@
-import { Html, Line, OrbitControls } from '@react-three/drei';
+import { Grid, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -8,7 +8,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { BuiltActivity } from '../activities/activities';
 import { useActivity } from '../activities/useActivity';
-import { layoutBounds, rotate } from '../model/geometry';
+import { itemToPlan, layoutBounds, rotate, wallLength, wallNormal } from '../model/geometry';
 import { chairFootprint } from '../model/pathfinding';
 import { CHAIRS } from '../model/catalogue';
 import { useStore } from '../model/store';
@@ -20,9 +20,9 @@ import { buildWalls, floorMaterial } from './walls';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
 import { PersonaActors } from './PersonaActors';
+import { placeAt } from '../ui/placeFlow';
 import { getOriginal, originalMissing } from '../originals/originals';
 import { P2_ID } from '../activities/activities';
-import { itemToPlan } from '../model/geometry';
 
 const P = (x: number, y: number, h = 0) => new THREE.Vector3(x / 1000, h / 1000, y / 1000);
 
@@ -137,6 +137,98 @@ const Floor = ({ layout }: { layout: Layout }) => {
   );
 };
 
+// ---------------------------------------------------------------- building aids
+
+/** Measuring grid on the floor: fine lines every 100 mm, strong blue lines every metre. */
+const FloorGrid = ({ layout }: { layout: Layout }) => {
+  const on = useStore((s) => s.grid3d && s.panel === 'room');
+  const b = layoutBounds({ ...layout, items: [] });
+  if (!on) return null;
+  return (
+    <Grid
+      position={[Math.floor(b.minX / 1000), 0.004, Math.floor(b.minY / 1000)]}
+      args={[60, 60]} cellSize={0.1} cellThickness={0.4} cellColor="#d3dae2" sectionSize={1} sectionThickness={0.9} sectionColor="#7aa3dc"
+      fadeDistance={28} fadeStrength={1.5} infiniteGrid followCamera={false}
+    />
+  );
+};
+
+/** A dimension line on the floor with its measurement. */
+const Dim = ({ a, b, text, lift = 0.02 }: { a: [number, number]; b: [number, number]; text: string; lift?: number }) => {
+  const mid: [number, number, number] = [(a[0] + b[0]) / 2, lift, (a[1] + b[1]) / 2];
+  const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
+  const nx = -dz / L * 0.08, nz = dx / L * 0.08;
+  return (
+    <group>
+      <Line points={[[a[0], lift, a[1]], [b[0], lift, b[1]]]} color="#1d2733" lineWidth={1.5} />
+      {[a, b].map((p, i) => <Line key={i} points={[[p[0] - nx, lift, p[1] - nz], [p[0] + nx, lift, p[1] + nz]]} color="#1d2733" lineWidth={1.5} />)}
+      <Html center position={mid} zIndexRange={[9, 0]}><div className="dim3d">{text}</div></Html>
+    </group>
+  );
+};
+
+/** Measurements of whatever is selected, drawn in 3D like a drawing's dimension lines. */
+const SelectionDims = ({ layout }: { layout: Layout }) => {
+  const sel = useStore((s) => s.selection);
+  if (!sel) return null;
+  if (sel.type === 'item') {
+    const it = layout.items.find((i) => i.id === sel.id);
+    if (!it) return null;
+    const c = (lx: number, ly: number): [number, number] => { const p = itemToPlan(it, { x: lx, y: ly }); return [p.x / 1000, p.y / 1000]; };
+    const hw = it.w / 2, hd = it.d / 2, off = 180;
+    return (
+      <group>
+        <Dim a={c(-hw, hd + off)} b={c(hw, hd + off)} text={`${it.w}`} />
+        <Dim a={c(hw + off, -hd)} b={c(hw + off, hd)} text={`${it.d}`} />
+        {(it.elevation ?? 0) > 0 && <Html center position={[it.x / 1000, (it.elevation ?? 0) / 1000 + 0.12, it.y / 1000]}><div className="dim3d">↕ {it.elevation} mm</div></Html>}
+        {it.ramp && <Html center position={[it.x / 1000, it.ramp.rise / 1000 + 0.35, it.y / 1000]}><div className="dim3d">rise {it.ramp.rise} · 1:{it.ramp.gradient}</div></Html>}
+      </group>
+    );
+  }
+  if (sel.type === 'wall') {
+    const w = layout.walls.find((x) => x.id === sel.id);
+    if (!w) return null;
+    const n = wallNormal(w), o = w.thickness / 2 + 250;
+    return <Dim a={[(w.a.x + n.x * o) / 1000, (w.a.y + n.y * o) / 1000]} b={[(w.b.x + n.x * o) / 1000, (w.b.y + n.y * o) / 1000]} text={`${Math.round(wallLength(w) - w.thickness)}`} />;
+  }
+  return null;
+};
+
+/** Dragging the selected furniture over the floor in 3D (snapped to the grid, one undo step). */
+let drag3d: { key: LayoutKey; id: string; dx: number; dz: number } | null = null;
+const startDrag3d = (key: LayoutKey, item: Item, at: THREE.Vector3) => {
+  useStore.getState().checkpoint();
+  drag3d = { key, id: item.id, dx: item.x / 1000 - at.x, dz: item.y / 1000 - at.z };
+  useStore.getState().set({ dragging3d: true });
+};
+const Drag3d = () => {
+  const { camera, gl } = useThree();
+  useEffect(() => {
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const ray = new THREE.Raycaster();
+    const hit = new THREE.Vector3();
+    const move = (e: PointerEvent) => {
+      if (!drag3d) return;
+      const r = gl.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+      if (!ray.ray.intersectPlane(plane, hit)) return;
+      const g = Math.max(1, useStore.getState().gridMm);
+      const d = drag3d;
+      useStore.getState().updateLayout((l) => {
+        const it = l.items.find((i) => i.id === d.id);
+        if (!it) return;
+        it.x = Math.round(((hit.x + d.dx) * 1000) / g) * g;
+        it.y = Math.round(((hit.z + d.dz) * 1000) / g) * g;
+      }, { commit: false, key: d.key });
+    };
+    const up = () => { if (drag3d) { drag3d = null; useStore.getState().set({ dragging3d: false }); } };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  }, [camera, gl]);
+  return null;
+};
+
 const SelectionBox = ({ item }: { item: Item }) => {
   const pts = useMemo(() => {
     const hw = item.w / 2000 + 0.03, hd = item.d / 2000 + 0.03;
@@ -145,14 +237,21 @@ const SelectionBox = ({ item }: { item: Item }) => {
   return <Line points={pts} color="#ff8a00" lineWidth={3} />;
 };
 
-const ItemMesh = ({ item, selected }: { item: Item; selected: boolean }) => {
-  const obj = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color]); // eslint-disable-line react-hooks/exhaustive-deps
+const ItemMesh = ({ item, selected, layoutKey }: { item: Item; selected: boolean; layoutKey: LayoutKey }) => {
+  const obj = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color, JSON.stringify(item.ramp)]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = useStore((s) => s.set);
   return (
     <group
       position={[item.x / 1000, 0, item.y / 1000]}
       rotation-y={THREE.MathUtils.degToRad(-item.rotation)}
-      onClick={(e) => { e.stopPropagation(); select({ selection: { type: 'item', id: item.id } }); }}
+      onClick={(e) => { if (useStore.getState().tool !== 'select') return; e.stopPropagation(); select({ selection: { type: 'item', id: item.id } }); }}
+      onPointerDown={(e) => {
+        // drag furniture across the floor in 3D (the selected item only, so orbiting still works)
+        const st = useStore.getState();
+        if (st.tool !== 'select' || !selected || e.button !== 0) return;
+        e.stopPropagation();
+        startDrag3d(layoutKey, item, e.point);
+      }}
     >
       <group position-y={(item.elevation ?? 0) / 1000}>
         <primitive object={obj} />
@@ -203,7 +302,7 @@ const ImportedItem = ({ item, selected, settings }: { item: Item; selected: bool
   );
 };
 
-const Items = ({ layout, settings }: { layout: Layout; settings: ActivitySettings }) => {
+const Items = ({ layout, settings, layoutKey }: { layout: Layout; settings: ActivitySettings; layoutKey: LayoutKey }) => {
   const sel = useStore((s) => s.selection);
   return (
     <>
@@ -211,7 +310,7 @@ const Items = ({ layout, settings }: { layout: Layout; settings: ActivitySetting
         it.kind === 'imported' ? (
           <ImportedItem key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} settings={settings} />
         ) : (
-          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} />
+          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} layoutKey={layoutKey} />
         ),
       )}
     </>
@@ -498,7 +597,7 @@ const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivi
       ctl.update();
       return;
     }
-    ctl.enabled = !follow;
+    ctl.enabled = !follow && !useStore.getState().dragging3d;
     if (anim.current) {
       const a = anim.current;
       a.k = Math.min(1, a.k + dt / 0.9);
@@ -578,9 +677,20 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     <>
       <EnvironmentSetup />
       <Lights layout={layout} hq={hq} />
-      <Floor layout={layout} />
-      <Walls layout={layout} />
-      <Items layout={layout} settings={settings} />
+      <group onClick={(e) => {
+        // the Place tool works in 3D too: click the floor (or a wall) where it should go
+        const st = useStore.getState();
+        if (st.tool !== 'place') return;
+        e.stopPropagation();
+        if (st.activeLayout !== layoutKey) st.set({ activeLayout: layoutKey });
+        placeAt(layoutKey, { x: e.point.x * 1000, y: e.point.z * 1000 });
+      }}>
+        <Floor layout={layout} />
+        <Walls layout={layout} />
+        <Items layout={layout} settings={settings} layoutKey={layoutKey} />
+      </group>
+      <FloorGrid layout={layout} />
+      <SelectionDims layout={layout} />
       {settings.type === 'original' && <OriginalActors built={built} live={live as never} />}
       {settings.type !== 'imported' && settings.type !== 'original' && (built.mh
         ? <PersonaActors built={built} settings={settings} live={live} />
@@ -588,6 +698,7 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       {built.props && <ActivityProps built={built} />}
       {settings.type !== 'imported' && settings.type !== 'original' && <RouteOverlay built={built} settings={settings} />}
       <Pins layoutKey={layoutKey} />
+      <Drag3d />
       <CameraRig layout={layout} built={built} live={live} />
       {hq && (
         <EffectComposer multisampling={0} enableNormalPass={false}>

@@ -377,6 +377,52 @@ const tvUnit: Builder = (w, d, h) => {
   return g;
 };
 
+const grabRailL: Builder = (w, _d, h) => {
+  // horizontal leg along the wall, vertical leg rising from its right-hand end
+  const g = new THREE.Group();
+  const x0 = -w / 2 + 0.03, x1 = w / 2 - 0.03;
+  g.add(rod([x0, 0, 0], [x1, 0, 0], 0.016, M.steel));
+  g.add(rod([x1, 0, 0], [x1, Math.max(0.2, h), 0], 0.016, M.steel));
+  for (const [x, y] of [[x0, 0], [x1, Math.max(0.2, h)]] as const) {
+    g.add(rod([x, y, 0], [x, y, -0.06], 0.016, M.steel));
+    g.add(mesh(cyl(0.035, 0.035, 0.01, 20), M.steel, [x, y, -0.065], [Math.PI / 2, 0, 0]));
+  }
+  g.position.z = 0.02;
+  return G(g);
+};
+
+const concrete = () => paint('#c9c6bf', 0.85);
+
+const ramp: Builder = (w, d, h, it) => {
+  const r = it.ramp ?? { rise: h * 1000, gradient: 14, landing: 1200, rails: 'both' as const };
+  const rise = r.rise / 1000, landing = Math.min(d, r.landing / 1000);
+  const top = -d / 2 + landing; // where the slope meets the landing (the ramp rises towards -z)
+  const shape = new THREE.Shape();
+  shape.moveTo(d / 2, 0); shape.lineTo(top, rise); shape.lineTo(-d / 2, rise); shape.lineTo(-d / 2, 0); shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: false });
+  geo.rotateY(-Math.PI / 2);
+  geo.translate(w / 2, 0, 0);
+  const g = G(mesh(geo, concrete()));
+  // edge kerbs and handrails ~900 mm above the surface on the chosen sides (left = left going up)
+  const surfaceAt = (z: number) => (z >= top ? rise * (d / 2 - z) / Math.max(0.001, d / 2 - top) : rise);
+  const sides = r.rails === 'both' ? [-1, 1] : r.rails === 'left' ? [-1] : r.rails === 'right' ? [1] : [];
+  for (const sx of sides) {
+    const x = sx * (w / 2 - 0.03);
+    const pts: [number, number, number][] = [[x, 0.9, d / 2 + 0.15], [x, 0.9 + surfaceAt(d / 2 - 0.01), d / 2 - 0.01], [x, 0.9 + rise, top], [x, 0.9 + rise, -d / 2 + 0.05]];
+    for (let i = 0; i < pts.length - 1; i++) g.add(rod(pts[i], pts[i + 1], 0.02, M.steel));
+    const n = Math.max(2, Math.ceil(d / 1.2));
+    for (let i = 0; i <= n; i++) {
+      const z = d / 2 - 0.05 - ((d - 0.1) * i) / n;
+      const y0 = surfaceAt(z);
+      g.add(rod([x, y0, z], [x, y0 + 0.9, z], 0.02, M.steel));
+    }
+  }
+  for (const sx of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.075, d), concrete(), [sx * (w / 2 - 0.025), 0.0375, 0]));
+  return g;
+};
+
+const step: Builder = (w, d, h) => G(boxOn(w, h, d, concrete(), 0, 0, 0, 0.004));
+
 const hallTable: Builder = (w, d, h) => {
   const g = G(boxOn(w, 0.03, d, M.walnut, 0, h - 0.03, 0, 0.005));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(cyl(0.015, 0.012, h - 0.03), M.blackMetal, [sx * (w / 2 - 0.04), (h - 0.03) / 2, sz * (d / 2 - 0.04)]));
@@ -421,7 +467,7 @@ const turningSpace: Builder = (w) => {
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
   'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
-  toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, bath,
+  toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,
 };

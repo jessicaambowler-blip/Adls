@@ -10,6 +10,7 @@ import { useStore } from '../model/store';
 import { askValue } from './dialogs';
 import { toggleLabels } from './Timeline';
 import { planPixels, runDetection } from './detectFlow';
+import { placeAt, previewAt } from './placeFlow';
 import { snapToPlan, type PlanPixels } from '../model/planSnap';
 import type { Item, Layout, LayoutKey, Opening, Vec2, Wall } from '../model/types';
 import { addRoom, addWalls, applyWallDrag, beginWallDrag, moveCorner, snapPoint, splitAtJunctions, splitWall, tidyWalls, type WallDrag } from '../model/walls';
@@ -27,7 +28,6 @@ type Drag =
 
 interface VB { x: number; y: number; w: number; h: number }
 
-const snap = (v: number, s = 10) => Math.round(v / s) * s;
 const pts = (p: Vec2[]) => p.map((q) => `${q.x},${q.y}`).join(' ');
 
 const fitView = (layout: Layout, aspect: number): VB => {
@@ -88,6 +88,22 @@ const ItemSymbol = ({ it, fs }: { it: Item; fs: number }) => {
     );
   } else if (k === 'grab-rail') {
     return <rect x={-hw} y={-hd} width={it.w} height={it.d} rx={it.d / 2} className="rail" />;
+  } else if (k === 'grab-rail-l') {
+    return <g><rect x={-hw} y={-hd} width={it.w} height={it.d} rx={it.d / 2} className="rail" /><circle cx={hw - 40} cy={0} r={70} className="rail" /></g>;
+  } else if (k === 'ramp') {
+    const r = it.ramp;
+    const top = -hd + (r ? Math.min(it.d, r.landing) : 0);
+    return (
+      <g>
+        <rect x={-hw} y={-hd} width={it.w} height={it.d} className="item ramp-sym" />
+        <line x1={-hw} y1={top} x2={hw} y2={top} className="sym-line" />
+        <line x1={0} y1={hd - 150} x2={0} y2={top + 200} className="ramp-arrow" />
+        <polyline points={`-120,${top + 380} 0,${top + 200} 120,${top + 380}`} className="ramp-arrow" />
+        {r && <text x={0} y={(top + hd) / 2 + fs * 0.35} fontSize={fs * 0.8} textAnchor="middle" className="ramp-text" transform={`rotate(${-it.rotation} 0 ${(top + hd) / 2})`}>UP 1:{r.gradient}</text>}
+      </g>
+    );
+  } else if (k === 'step') {
+    detail.push(<line key="s" x1={-hw} y1={hd - 60} x2={hw} y2={hd - 60} className="sym-line" />);
   } else if (k === 'wardrobe' || k === 'kitchen-bench' || k === 'drawers') {
     detail.push(<line key="f" x1={-hw} y1={hd - 40} x2={hw} y2={hd - 40} className="sym-line" />);
   }
@@ -128,6 +144,10 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const selection = useStore((s) => s.selection);
   const tool = useStore((s) => s.tool);
   const labels = useStore((s) => s.showLabels);
+  const gridMm = useStore((s) => s.gridMm);
+  const panel = useStore((s) => s.panel);
+  // "Align to grid": moving and drawing step in this many mm
+  const snap = (v: number) => Math.round(v / Math.max(1, gridMm)) * Math.max(1, gridMm);
   const settings = useStore((s) => s.project.activity);
   const notes = useStore((s) => s.project.notes);
   const set = useStore((s) => s.set);
@@ -161,7 +181,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   /** Snap for drawing: existing corners, then walls drawn on the uploaded plan, then existing walls / grid. */
   const snapDrawPt = (p: Vec2, prev?: Vec2): { p: Vec2; plan: boolean; thick?: number } => {
     const tol = vb.w / 70;
-    const s0 = snapPoint(layout, p, tol, prev);
+    const s0 = snapPoint(layout, p, tol, prev, gridMm);
     if (s0.kind === 'corner' || !pix.current || !bgNow) return { p: s0.p, plan: false };
     const ps = snapToPlan(pix.current, p, Math.max(tol, 150));
     if (ps.x === undefined && ps.y === undefined) return { p: s0.p, plan: false };
@@ -267,8 +287,12 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       setRoom({ a: q, b: q });
       return;
     }
+    if (tool === 'place') {
+      placeAt(layoutKey, p);
+      return;
+    }
     if (tool === 'add-label') {
-      const at = { x: snap(p.x, 50), y: snap(p.y, 50) };
+      const at = { x: snap(p.x), y: snap(p.y) };
       set({ tool: 'select' });
       askValue('What is this room called?', 'Room name', '', 'Add name').then((text) => {
         if (!text?.trim()) return;
@@ -326,7 +350,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   };
 
   const snapDraw = (p: Vec2) => {
-    let q = { x: snap(p.x, 50), y: snap(p.y, 50) };
+    let q = { x: snap(p.x), y: snap(p.y) };
     const last = draw[draw.length - 1];
     if (last) {
       const d = sub(q, last);
@@ -377,7 +401,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       live.current.cursorThick = sn.plan ? sn.thick ?? 0 : -1;
       setCursor(sn.p);
     }
-    if (tool === 'split-wall') setCursor(p);
+    if (tool === 'split-wall' || tool === 'place') setCursor(p);
     if (tool === 'draw-room') setCursor(snapDraw(p));
     else if (tool === 'calibrate') setCursor(p);
     if (!drag) return;
@@ -492,7 +516,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         }
         if (e.key === 'Escape') { finishWalls(L.draw); L.draw = []; set({ tool: 'select' }); return; }
       }
-      if (e.key === 'Escape') { setDraw([]); setCalib([]); setArea(null); setRoom(null); set({ tool: 'select' }); }
+      if (e.key === 'Escape') { setDraw([]); setCalib([]); setArea(null); setRoom(null); set({ tool: 'select', placing: undefined }); }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -651,7 +675,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         })}
         {layout.items.map((it) => {
           const sel = selection?.type === 'item' && selection.id === it.id;
-          if (it.kind === 'turning-space' || it.kind === 'grab-rail' || (!labels && !sel)) return null;
+          if (it.kind === 'turning-space' || it.kind === 'grab-rail' || it.kind === 'grab-rail-l' || (it.kind === 'ramp' && !sel) || (!labels && !sel)) return null;
           // names only where they fit inside the item (the selected item always shows its name)
           const text = itemLabel(it.kind, it.label);
           const across = Math.abs(Math.cos((it.rotation * Math.PI) / 180)) > 0.5 ? it.w : it.d;
@@ -794,6 +818,17 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
             )}
           </g>
         )}
+        {tool === 'place' && cursor && (() => {
+          const pv = previewAt(layoutKey, cursor);
+          if (pv.item) return <g pointerEvents="none" opacity={0.55} transform={`translate(${pv.item.x} ${pv.item.y}) rotate(${pv.item.rotation})`}><ItemSymbol it={pv.item} fs={fs} /></g>;
+          if (pv.opening) {
+            const w = layout.walls.find((x) => x.id === pv.opening!.wallId);
+            if (!w) return null;
+            const a = wallPoint(w, pv.opening.offset - pv.opening.width / 2), b = wallPoint(w, pv.opening.offset + pv.opening.width / 2);
+            return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="place-opening" pointerEvents="none" />;
+          }
+          return <circle cx={cursor.x} cy={cursor.y} r={fs * 0.5} className="snap-pt" pointerEvents="none" />;
+        })()}
         {tool === 'add-room' && cursor && !room && <circle cx={cursor.x} cy={cursor.y} r={fs * 0.35} className="snap-pt" pointerEvents="none" />}
         {room && (
           <g pointerEvents="none">
@@ -831,13 +866,13 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         )}
       </svg>
 
-      <div className="plan-edit-tools" role="toolbar" aria-label="Plan tools">
+      {panel !== 'room' && <div className="plan-edit-tools" role="toolbar" aria-label="Plan tools">
         {([['select', 'Select', 'Select and move things', '↖'], ['draw-wall', 'Walls', 'Draw new walls', '✎'], ['add-room', 'Room', 'Add a room', '▭'], ['split-wall', 'Split', 'Split a wall so part of it can move', '✂'], ['add-label', 'Name', 'Write a room name on the plan', 'T']] as const).map(([t, label, title, icon]) => (
           <button key={t} className={tool === t ? 'on' : ''} onClick={() => set({ tool: t, selection: t === 'select' ? selection : null })} title={title} aria-label={title}>
             <span aria-hidden>{icon}</span> {label}
           </button>
         ))}
-      </div>
+      </div>}
       <div className="plan-tools">
         <button className={`labels-toggle ${labels ? 'on' : ''}`} onClick={() => toggleLabels()} title={labels ? 'Hide names and measurements' : 'Show names and measurements'} aria-pressed={labels}>Aa</button>
         <button onClick={() => setVb((v) => ({ x: v.x + v.w * 0.1, y: v.y + v.h * 0.1, w: v.w * 0.8, h: v.h * 0.8 }))} aria-label="Zoom in">＋</button>
@@ -857,6 +892,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           {tool === 'add-room' && 'Drag from one corner of the new room to the opposite corner. Sides that run along existing walls join them.'}
           {tool === 'split-wall' && 'Click a wall where you want to cut it. Each piece can then be moved on its own.'}
           {tool === 'add-label' && 'Click where the room name should go.'}
+          {tool === 'place' && <PlaceHint />}
           {tool === 'calibrate' && (calib.length === 0
             ? 'Set the scale, step 1 of 2: click one end of a measurement you know – e.g. the end of an overall dimension line. (Scroll to zoom, right-drag to move.)'
             : 'Step 2 of 2: click the other end.')}
@@ -872,4 +908,10 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       </div>
     </div>
   );
+};
+
+const PlaceHint = () => {
+  const pl = useStore((s) => s.placing);
+  if (!pl) return null;
+  return <>{pl.what === 'opening' ? `Click on a wall to add the ${pl.label.toLowerCase()}.` : pl.what === 'template' ? `Click inside the room to lay out: ${pl.label}.` : `Click to place the ${pl.label.toLowerCase()}${pl.what === 'item' ? ' – wall items go against the nearest wall' : ''}. (Esc to cancel)`}</>;
 };

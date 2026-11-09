@@ -104,7 +104,13 @@ export const diffLayouts = (a: Layout, b: Layout): Change[] => {
   for (const ib of b.items) {
     const ia = matchItem(ib);
     const name = itemLabel(ib.kind, ib.label);
-    if (!ia) { out.push({ what: `${name} added`, detail: `${ib.w} × ${ib.d} mm` }); continue; }
+    if (!ia) {
+      const detail = ib.ramp ? `${ib.w} mm wide, rise ${ib.ramp.rise} mm at 1:${ib.ramp.gradient}, ${ib.d} mm long incl. ${ib.ramp.landing} mm landing, handrails ${ib.ramp.rails === 'both' ? 'both sides' : ib.ramp.rails}`
+        : ib.kind.startsWith('grab-rail') ? `${ib.w} mm${ib.kind === 'grab-rail-l' ? ` × ${ib.h} mm L-shaped` : ''}, ${ib.elevation ?? 800} mm above floor${roomNear(ib) ? ` (${roomNear(ib)})` : ''}`
+        : `${ib.w} × ${ib.d} mm${roomNear(ib) ? ` (${roomNear(ib)})` : ''}`;
+      out.push({ what: `${name} added`, detail });
+      continue;
+    }
     used.add(ia.id);
     const moved = dist(ia, ib);
     if (moved > 5) out.push({ what: `${name} moved`, detail: `${Math.round(moved)} mm` });

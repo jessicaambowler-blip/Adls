@@ -9,6 +9,7 @@ import { NotesPanel } from './ui/NotesPanel';
 import { PlanView } from './ui/PlanView';
 import { RoomPanel } from './ui/RoomPanel';
 import { Help, Summary } from './ui/Summary';
+import { BuildPalette } from './ui/BuildPalette';
 import { Timeline } from './ui/Timeline';
 import { Dialogs, HOSTED, ask, notify } from './ui/dialogs';
 import { loadOriginal, probeOriginals } from './originals/originals';
@@ -191,13 +192,15 @@ export default function App() {
   const active = useStore((s) => s.activeLayout);
   const showSummary = useStore((s) => s.showSummary);
   const showHelp = useStore((s) => s.showHelp);
+  const panel = useStore((s) => s.panel);
   return (
     <div className="app">
       <TopBar />
       <main className="main">
         <Sidebar />
         <section className="workspace">
-          <div className={`views ${compare ? 'compare' : 'single'} mode-${viewMode}`}>
+          {panel === 'room' && <BuildPalette />}
+          <div className={`views ${compare ? 'compare' : 'single'} mode-${viewMode} ${panel === 'room' ? 'with-palette' : ''}`}>
             {compare ? (
               <>
                 <Column k="existing" mode={viewMode} labelled />

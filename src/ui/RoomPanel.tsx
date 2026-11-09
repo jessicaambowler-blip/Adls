@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { CATALOGUE, catalogueEntry, itemLabel } from '../model/catalogue';
 import { clearOpening, layoutCentre, uid, wallLength, wallNormal, wallPoint } from '../model/geometry';
+import { rampLength, rampNote } from '../model/place';
 import { applyWallDrag, beginWallDrag, removeWall, setWallLength, splitAtJunctions, splitWall, tidyWalls } from '../model/walls';
 import { rectInfo, setRoomSize } from '../model/edit';
 import { useStore } from '../model/store';
@@ -84,6 +85,23 @@ const ItemInspector = ({ it }: { it: Item }) => {
     <div className="inspector">
       <h3>{itemLabel(it.kind, it.label)}</h3>
       {cat && <p className="muted">{cat.description}</p>}
+      {it.ramp && (() => {
+        const r = it.ramp;
+        const upR = (p: Partial<NonNullable<Item['ramp']>>) => { const nr = { ...r, ...p }; up({ ramp: nr, d: rampLength(nr), h: nr.rise }); };
+        return (
+          <div className="ramp-edit">
+            <div className="grid2">
+              <NumberField label="Rise" value={r.rise} onChange={(rise) => upR({ rise })} step={10} min={10} max={1500} />
+              <NumberField label="Top landing" value={r.landing} onChange={(landing) => upR({ landing })} step={100} min={0} max={3000} />
+            </div>
+            <div className="row-label">Gradient</div>
+            <Segmented label="Gradient" value={String(r.gradient)} onChange={(v) => upR({ gradient: +v })} options={[8, 10, 14, 20].map((g) => ({ value: String(g), label: `1:${g}` }))} />
+            <div className="row-label">Handrails</div>
+            <Segmented label="Handrails" value={r.rails} onChange={(rails) => upR({ rails })} options={[{ value: 'both', label: 'Both' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }, { value: 'none', label: 'None' }]} />
+            <p className="callout">Length {rampLength(r)} mm. {rampNote(r)}</p>
+          </div>
+        );
+      })()}
       <div className="grid2">
         <NumberField label="Across (X)" value={it.x} onChange={(x) => up({ x })} step={50} />
         <NumberField label="Down (Y)" value={it.y} onChange={(y) => up({ y })} step={50} />
@@ -146,8 +164,13 @@ const OpeningInspector = ({ o }: { o: Opening }) => {
       </div>
       {o.kind !== 'window' && (
         <>
-          <div className="row-label">Common door sizes</div>
-          <div className="btnrow">{[720, 820, 870, 920, 1020].map((w) => <button key={w} className={o.width === w ? 'primary' : ''} onClick={() => up({ width: w })}>{w}</button>)}</div>
+          <div className="row-label">Common door sizes (≈ clear opening)</div>
+          <div className="btnrow">{[720, 820, 870, 920, 1020].map((w) => <button key={w} className={o.width === w ? 'primary' : ''} onClick={() => up({ width: Math.min(w, L - 100) })} title={`About ${clearOpening({ ...o, width: w })} mm clear`}>{w}<small className="sub"> ≈{clearOpening({ ...o, width: w })}</small></button>)}</div>
+          {clearOpening(o) < 850 && (() => {
+            // the smallest common size giving a wheelchair-friendly clear opening that fits this wall
+            const fit = [870, 920, 1020].find((w) => clearOpening({ ...o, width: w }) >= 850 && w <= L - 100);
+            return fit ? <button className="primary wide" onClick={() => up({ width: fit, offset: Math.max(fit / 2 + 50, Math.min(L - fit / 2 - 50, o.offset)) })}>Widen for a wheelchair → {fit} mm door (≈{clearOpening({ ...o, width: fit })} clear)</button> : <p className="muted">This wall is too short for a wider door here – try moving the door along the wall or a sliding door.</p>;
+          })()}
         </>
       )}
       {(o.kind === 'door' || o.kind === 'sliding-door') && (

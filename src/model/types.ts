@@ -47,6 +47,9 @@ export type ItemKind =
   | 'shower'
   | 'shower-commode'
   | 'grab-rail'
+  | 'grab-rail-l'
+  | 'ramp'
+  | 'step'
   | 'bath'
   | 'mobile-hoist'
   | 'kitchen-bench'
@@ -75,6 +78,8 @@ export interface Item {
   color?: string;
   /** shown on the plan only (the 3D model comes from an original VisADLs recording) */
   hidden3d?: boolean;
+  /** ramps: rise (mm), gradient 1:N, top landing length (mm), handrails */
+  ramp?: { rise: number; gradient: number; landing: number; rails: 'both' | 'left' | 'right' | 'none' };
 }
 
 export type FloorFinish = 'timber' | 'tiles' | 'vinyl' | 'carpet';

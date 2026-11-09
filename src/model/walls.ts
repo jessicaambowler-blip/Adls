@@ -189,7 +189,7 @@ export interface Snap { p: Vec2; kind: 'corner' | 'wall' | 'grid'; wallId?: stri
  * Snap a point for drawing: to an existing corner, else onto an existing wall, else to a 50 mm grid
  * (square to the previous point when nearly horizontal or vertical).
  */
-export const snapPoint = (l: Layout, p: Vec2, tol: number, prev?: Vec2): Snap => {
+export const snapPoint = (l: Layout, p: Vec2, tol: number, prev?: Vec2, grid = 50): Snap => {
   let best: Snap | null = null;
   let bd = tol;
   for (const w of l.walls) for (const e of [w.a, w.b]) {
@@ -198,7 +198,8 @@ export const snapPoint = (l: Layout, p: Vec2, tol: number, prev?: Vec2): Snap =>
   }
   if (best) return best;
   // keep square to the previous point when close to horizontal/vertical
-  let q = { x: Math.round(p.x / 50) * 50, y: Math.round(p.y / 50) * 50 };
+  const gs = Math.max(1, grid);
+  let q = { x: Math.round(p.x / gs) * gs, y: Math.round(p.y / gs) * gs };
   if (prev) {
     const d = sub(q, prev);
     if (Math.abs(d.x) < Math.abs(d.y) * 0.18) q = { x: prev.x, y: q.y };
