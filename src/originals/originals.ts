@@ -19,7 +19,8 @@ import { useStore } from '../model/store';
  * published as <name>.b64.json ({"b64": "..."}) and decoded here.
  */
 export const fetchBinary = async (url: string): Promise<ArrayBuffer> => {
-  if (import.meta.env?.VITE_HOSTED === '1') {
+  // hosted preview and the single-file version get each binary file as <name>.b64.json
+  if (import.meta.env?.VITE_HOSTED === '1' || import.meta.env?.VITE_STANDALONE === '1') {
     const j = await (await fetch(`${url}.b64.json`)).json();
     const bin = atob(j.b64);
     const out = new Uint8Array(bin.length);

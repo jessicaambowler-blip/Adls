@@ -6,11 +6,17 @@ import { BONES, fetchBinary, type PersonSpec } from '../originals/originals';
 // MetaHumans from the original VisADLs project: loading (body, clothes and face sharing one
 // skeleton) and helpers shared by every scene that shows them.
 
+// The exported FBX files name texture images that were not exported; answer those requests with a
+// blank image instead of letting the browser try to load them.
+const BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+const noTextures = new THREE.LoadingManager();
+noTextures.setURLModifier((url) => (/^(data|blob):/.test(url) ? url : BLANK));
+
 const fbxCache = new Map<string, Promise<THREE.Group>>();
 export const loadFbx = (url: string) => {
   let p = fbxCache.get(url);
   if (!p) {
-    p = fetchBinary(url).then((buf) => new FBXLoader().parse(buf, ''));
+    p = fetchBinary(url).then((buf) => new FBXLoader(noTextures).parse(buf, ''));
     fbxCache.set(url, p);
   }
   // SkeletonUtils.clone keeps skinned meshes bound to their own (cloned) bones

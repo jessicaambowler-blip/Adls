@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "bench": "tsx bench/detect-bench.ts",
-    "test": "tsx tests/walls.test.ts"
+    "test": "tsx tests/walls.test.ts",
+    "standalone": "node tools/make-standalone.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",

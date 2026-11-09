@@ -6,3 +6,5 @@ dist
 # Original VisADLs assets (MetaHumans, research participants' motion capture): not committed
 public/originals
 __pycache__/
+dist-standalone
+VisADLs-demo*.html
