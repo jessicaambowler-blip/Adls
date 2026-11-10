@@ -22,7 +22,7 @@ const ReviewCard = () => {
   return (
     <div className="review-card" role="region" aria-label="Review detected walls">
       <h3>Walls found – please review</h3>
-      <p className="muted">Found <b>{c.walls}</b> walls, <b>{c.doors}</b> doors, <b>{c.windows}</b> windows and <b>{c.openings}</b> other openings. Compare them with the plan underneath. Anything missing or wrong can be fixed after you accept.</p>
+      <p className="muted">Found <b>{c.walls}</b> walls, <b>{c.doors}</b> doors, <b>{c.windows}</b> windows and <b>{c.openings}</b> other openings. </p>
       <div className="legend-row">
         <span><i style={{ background: '#1565c0' }} />wall</span><span><i style={{ background: '#e53935' }} />door</span>
         <span><i style={{ background: '#00a3b4' }} />window</span><span><i style={{ background: '#f59f00' }} />opening / double door</span>
@@ -47,7 +47,7 @@ const VerifyCard = () => {
   return (
     <div className="verify-card">
       <h3>Check the measurements</h3>
-      <p className="muted">These walls were found automatically from a drawing. Before relying on them, compare the room sizes and door widths with the plan's dimensions or a site measure. Click a wall or door to correct it.</p>
+      <p className="muted">Compare sizes with the plan before relying on them.</p>
       <div className="btnrow"><button onClick={() => updateLayout((l) => { l.unverified = false; })}>I've checked the key measurements</button></div>
     </div>
   );
@@ -84,7 +84,6 @@ const ItemInspector = ({ it }: { it: Item }) => {
   return (
     <div className="inspector">
       <h3>{itemLabel(it.kind, it.label)}</h3>
-      {cat && <p className="muted">{cat.description}</p>}
       {it.ramp && (() => {
         const r = it.ramp;
         const upR = (p: Partial<NonNullable<Item['ramp']>>) => { const nr = { ...r, ...p }; up({ ramp: nr, d: rampLength(nr), h: nr.rise }); };
@@ -136,7 +135,6 @@ const ItemInspector = ({ it }: { it: Item }) => {
         <button onClick={() => updateLayout((l) => { l.items.push({ ...it, id: uid('item'), x: it.x + 200, y: it.y + 200 }); })}>Duplicate</button>
         <button className="danger" onClick={() => { updateLayout((l) => { l.items = l.items.filter((i) => i.id !== it.id); }); set({ selection: null }); }}>Remove</button>
       </div>
-      <p className="hint">Tip: drag it on the plan. Wall items snap to walls (hold Alt to stop snapping). Arrow keys nudge 10 mm (Shift = 100 mm).</p>
     </div>
   );
 };
@@ -152,7 +150,7 @@ const OpeningInspector = ({ o }: { o: Opening }) => {
   return (
     <div className="inspector">
       <h3>{name}</h3>
-      {o.kind !== 'window' && <p className="callout">Estimated clear opening: <b>{clearOpening(o)} mm</b><br /><small>Leaf width less door stops/leaf thickness – measure on site to confirm.</small></p>}
+      {o.kind !== 'window' && <p className="callout">Estimated clear opening: <b>{clearOpening(o)} mm</b></p>}
       <Segmented label="Type" value={o.kind} onChange={(kind) => up({ kind, ...(kind === 'window' ? { sill: 900, height: 1200 } : { sill: 0, height: 2040 }) })} options={[
         { value: 'door', label: 'Hinged' }, { value: 'sliding-door', label: 'Sliding' }, { value: 'opening', label: 'No door' }, { value: 'window', label: 'Window' },
       ]} />
@@ -214,7 +212,6 @@ const WallInspector = ({ id }: { id: string }) => {
         <button onClick={() => nudge(10)}>{plusLabel} 10</button>
         <button onClick={() => nudge(100)}>{plusLabel} 100</button>
       </div>
-      <p className="muted">Or drag it on the plan, or use the arrow keys (Shift = 100 mm). Walls joined to it stretch to follow; a wall carrying on in line gets a step. Drag the <b>corner squares</b> to change its ends.</p>
       <div className="btnrow">
         <button onClick={() => { let ids: [string, string] | null = null; updateLayout((l) => { ids = splitWall(l, id, wallPoint(w, L / 2)); }); if (ids) set({ selection: { type: 'wall', id: (ids as [string, string])[0] } }); }}>✂ Split in half</button>
         <button onClick={() => set({ tool: 'split-wall', selection: null })}>✂ Split at a point…</button>
@@ -244,7 +241,6 @@ const LabelInspector = ({ id }: { id: string }) => {
     <div className="inspector">
       <h3>Room name</h3>
       <label className="text">Name<input value={lb.text} onChange={(e) => updateLayout((l) => { const x = l.labels?.find((q) => q.id === id); if (x) x.text = e.target.value; })} /></label>
-      <p className="muted">Drag it on the plan to move it.</p>
       <div className="btnrow"><button className="danger" onClick={() => { updateLayout((l) => { l.labels = l.labels?.filter((x) => x.id !== id); }); set({ selection: null }); }}>Remove name</button></div>
     </div>
   );
@@ -256,7 +252,6 @@ const MarkerInspector = ({ which }: { which: 'start' | 'end' }) => {
   return (
     <div className="inspector">
       <h3>{which === 'start' ? 'Start point' : 'End point'}</h3>
-      <p className="muted">{which === 'start' ? 'Where the wheelchair starts. The arrow shows which way it faces.' : 'Where the wheelchair should end up for “Move around the room”.'}</p>
       {which === 'start' && (
         <div className="btnrow">
           {[['↑', 180], ['→', 270], ['↓', 0], ['←', 90]].map(([l, h]) => (
@@ -369,7 +364,6 @@ export const RoomPanel = () => {
       {selection?.type === 'wall' && <WallInspector id={selection.id} />}
       {selection?.type === 'label' && <LabelInspector id={selection.id} />}
       {(selection?.type === 'start' || selection?.type === 'end') && <MarkerInspector which={selection.type} />}
-      {!selection && <p className="hint big">Click anything on the plan (or in 3D) to change it. Editing: <b className={`lk ${active}`}>{active === 'existing' ? 'Existing home' : 'Proposed changes'}</b></p>}
 
       <Section title="1. Start with a room" open={!selection}>
         <button className="primary wide" onClick={loadHouse}>Load the demo house (existing and proposed)</button>
@@ -390,7 +384,6 @@ export const RoomPanel = () => {
         <input ref={planInput} type="file" accept="image/*,.pdf" hidden onChange={(e) => { onPlanFile(e.target.files?.[0]); e.target.value = ''; }} />
         {!layout.background ? (
           <>
-            <p className="muted">Upload a plan (photo, scan, image or PDF) and build the walls from it in three steps: upload, set the scale, then let the app find the walls or trace them yourself.</p>
             <button className="primary wide" onClick={() => planInput.current?.click()}>Upload a floor plan…</button>
           </>
         ) : (
@@ -408,12 +401,11 @@ export const RoomPanel = () => {
             </li>
             <li className={layout.background.calibrated ? 'done' : 'now'}>
               <b>Set the scale</b>
-              <p className="muted">{layout.background.calibrated ? 'Done. Sizes on the plan are in real millimetres.' : 'Click both ends of a measurement printed on the plan (an overall length is best), then type what it says.'}</p>
+              {!layout.background.calibrated && <p className="muted">Click both ends of a printed measurement.</p>}
               <button className={layout.background.calibrated ? '' : 'primary'} onClick={() => set({ tool: 'calibrate', selection: null })}>{layout.background.calibrated ? 'Set the scale again' : 'Set the scale'}</button>
             </li>
             <li className={layout.background.calibrated ? 'now' : ''}>
               <b>Make the walls</b>
-              <p className="muted">Let the app find them (check the result), or trace them: the Walls tool snaps to walls drawn on the plan and picks up their thickness.</p>
               <div className="btnrow">
                 <button className={layout.background.calibrated ? 'primary' : ''} disabled={detecting} onClick={async () => {
                   if (!layout.background?.calibrated && !(await ask('The scale has not been set yet, so the sizes found will be wrong. Find walls anyway?', 'Find walls anyway'))) return;
@@ -428,13 +420,13 @@ export const RoomPanel = () => {
         )}
       </Section>
 
-      <Section title="Room size & finishes" open={!selection}>
+      <Section title="Room size & finishes" open={false}>
         {rect ? (
           <div className="grid2">
             <NumberField label="Inside width" value={rect.width} onChange={(v) => updateLayout((l) => setRoomSize(l, v))} step={50} min={800} />
             <NumberField label="Inside depth" value={rect.depth} onChange={(v) => updateLayout((l) => setRoomSize(l, undefined, v))} step={50} min={800} />
           </div>
-        ) : <p className="muted">This room has a custom outline – drag walls on the plan to resize.</p>}
+        ) : null}
         <NumberField label="Ceiling height" value={layout.ceilingHeight} onChange={(v) => updateLayout((l) => { l.ceilingHeight = v; })} step={50} min={2100} max={4000} />
         <div className="row-label">Floor</div>
         <Segmented label="Floor finish" value={layout.floor} options={FLOORS} onChange={(floor) => updateLayout((l) => { l.floor = floor; })} />
@@ -444,7 +436,7 @@ export const RoomPanel = () => {
         </div>
       </Section>
 
-      <Section title="3. Furniture & equipment" open={!selection}>
+      <Section title="All furniture & equipment" open={false}>
         {groups.map((g) => (
           <div key={g}>
             <div className="row-label">{g}</div>
@@ -456,7 +448,6 @@ export const RoomPanel = () => {
       </Section>
 
       <Section title="Import 3D models" open={false}>
-        <p className="muted">Add your own furniture, equipment or animated people (GLB/glTF or FBX). Animated files – such as motion capture exported from the original VisADLs Unreal project – can be played with the timeline. Files stay on this computer.</p>
         <input ref={modelInput} type="file" accept=".glb,.gltf,.fbx" hidden onChange={(e) => { onModelFile(e.target.files?.[0]); e.target.value = ''; }} />
         <button onClick={() => modelInput.current?.click()}>Import model…</button>
       </Section>

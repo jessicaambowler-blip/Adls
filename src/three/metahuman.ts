@@ -94,7 +94,7 @@ const faceMaterials = (m: THREE.SkinnedMesh, skin = SKIN) => {
     new THREE.MeshStandardMaterial({ map: getEyeTexture(), roughness: 0.15 }),
     new THREE.MeshStandardMaterial({ map: getEyeTexture(), roughness: 0.15 }),
     hidden,
-    mat('#2a1e16', 0.9),
+    hidden,
     hidden,
   ];
   if (groups.length === 7 && names.some((n) => /teeth/i.test(n))) {
@@ -103,7 +103,7 @@ const faceMaterials = (m: THREE.SkinnedMesh, skin = SKIN) => {
   }
   return names.map((n) => {
     if (/occlusion|lacrimal|blend|shell|cartilage/i.test(n)) return hidden;
-    if (/lash/i.test(n)) return mat('#2a1e16', 0.9);
+    if (/lash/i.test(n)) return hidden;
     if (/eye/i.test(n)) return new THREE.MeshStandardMaterial({ map: getEyeTexture(), roughness: 0.15 });
     if (/teeth/i.test(n)) return mat('#ece6da', 0.35);
     return mat(skin, 0.55);

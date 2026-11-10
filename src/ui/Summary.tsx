@@ -150,7 +150,7 @@ export const Summary = () => {
           <p>{date}{p.consumerName && <> · Consumer: {p.consumerName}</>}{p.otName && <> · OT: {p.otName}</>}</p>
           <p>
             Activity explored: <b>{ACTIVITY_INFO[p.activity.type].label}</b>
-            {p.activity.character === 'p2' ? <> by Persona 2 from the original VisADLs project</> : null} with a {CHAIRS[p.activity.chair].label.toLowerCase()}
+            {p.activity.character === 'p2' ? <> by Persona 2</> : null} with a {CHAIRS[p.activity.chair].label.toLowerCase()}
             {p.activity.character === 'p2' && p.activity.type === 'bed-transfer' && p.activity.bedMethod !== 'side' ? <>, transferring with a ceiling hoist and a carer (recorded movement)</> : p.activity.supportPerson ? ' and a support person' : ''}.
           </p>
 
@@ -167,7 +167,7 @@ export const Summary = () => {
           ) : <p>No differences between existing and proposed layouts yet.</p>}
 
           <h2>Proposed plan</h2>
-          <p className="caveat">Inside wall lengths and door leaf widths in millimetres (red dots mark doorways; orange outlines mark rails and ramps). Not to scale for construction.</p>
+          <p className="caveat">Dimensions in mm. Not to scale.</p>
           <MiniPlan l={p.layouts.proposed} />
 
           {p.layouts.proposed.items.some((i) => i.kind === 'ramp' || i.kind.startsWith('grab-rail')) && (

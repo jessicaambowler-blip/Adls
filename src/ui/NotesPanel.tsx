@@ -43,7 +43,7 @@ export const NotesPanel = () => {
   return (
     <div className="panel-body">
       <div className="note-form">
-        <label htmlFor="note-text" className="row-label">Add a note about what you can see right now</label>
+        <label htmlFor="note-text" className="row-label">New note</label>
         <textarea id="note-text" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Footplate comes close to the bedside table when turning" />
         <Segmented label="Type of note" value={category} onChange={setCategory} options={CATEGORIES} />
         <div className="row-label">Who raised it?</div>
@@ -53,7 +53,6 @@ export const NotesPanel = () => {
           {pendingPin && <button onClick={() => set({ pendingPin: undefined })}>Unpin</button>}
           <button className="primary" onClick={save} disabled={!text.trim()}>Save note</button>
         </div>
-        <p className="hint">Notes remember the layout ({active}), the activity and the moment in the animation, so you can jump back to them.</p>
       </div>
 
       <h3 className="list-title">Notes ({notes.length})</h3>

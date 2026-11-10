@@ -25,13 +25,12 @@ export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layou
   return (
     <div className={`result ${r.status}`}>
       <b>{name}: </b>
-      {r.status === 'clear' && <>A route was found for a {C.width} mm wide chair. At its narrowest the route leaves roughly <b>{Math.max(0, r.minSideClearance)} mm</b> each side.</>}
-      {r.status === 'tight' && <>The route is <b>tight</b>{r.minSideClearance > 0 && r.minSideClearance < 999 && <> – roughly {r.minSideClearance} mm each side at the narrowest point</>}.{contacts.length > 0 && <> The chair would bump the <b>{contacts.join(', ')}</b> (red rings) – could these be moved?</>}</>}
-      {built.narrow && <div className="problem">⚠ <b>Too narrow at {built.narrow.where}.</b> The chair outline overlaps the frame there (shown in red on the plan). The animation carries on so you can see the rest.</div>}
-      {r.status === 'blocked' && <>No route could be found for a {C.width} mm wide chair. The animation shows the chair passing through obstacles so you can see where.</>}
-      {built.problem && <div className="problem">⚠ {built.problem}</div>}
-      {unverified && <div className="problem">⚠ Room measurements came from automatic detection and have not been checked yet.</div>}
-      <div className="small">Travel takes about {r.duration.toFixed(0)} s in this animation.</div>
+      {r.status === 'clear' && <>Clear – about <b>{Math.max(0, r.minSideClearance)} mm</b> each side at the narrowest.</>}
+      {r.status === 'tight' && <>Tight{r.minSideClearance > 0 && r.minSideClearance < 999 && <> – about {r.minSideClearance} mm each side</>}.{contacts.length > 0 && <> Bumps: {contacts.join(', ')}.</>}</>}
+      {r.status === 'blocked' && <>No route for a {C.width} mm chair.</>}
+      {built.narrow && <div className="problem">Too narrow at {built.narrow.where}.</div>}
+      {built.problem && <div className="problem">{built.problem}</div>}
+      {unverified && <div className="problem">Measurements not yet checked.</div>}
     </div>
   );
 };
@@ -71,11 +70,7 @@ export const ActivityPanel = () => {
   const p2 = s.character === 'p2' && p2Ready;
   const needs = ACTIVITY_INFO[s.type].needs;
   const candidates = needs ? layout.items.filter((i) => needs.includes(i.kind)) : [];
-  const blurbFor = (t: ActivityType) =>
-    t === 'bed-transfer' && p2 && s.bedMethod !== 'side'
-      ? 'She drives to the bed and parks beside it, then the carer transfers her with the ceiling hoist – her recorded movement, fitted to this bed.'
-      : t === 'navigate' && p2 ? 'She drives from the start (S) to the end (E) point, using her recorded seated movement. Drag the markers on the plan.'
-      : ACTIVITY_INFO[t].blurb;
+  const blurbFor = (t: ActivityType) => ACTIVITY_INFO[t].blurb;
 
   return (
     <div className="panel-body">
@@ -93,7 +88,7 @@ export const ActivityPanel = () => {
                 </button>
                 {on && (
                   <div className="act-body">
-                    <p className="muted">{blurbFor(t)}</p>
+                    {blurbFor(t) && <p className="muted">{blurbFor(t)}</p>}
                     {candidates.length > 1 && (
                       <label className="select">Use which {needs![0].split('-')[0]}?
                         <select value={builtActive.target?.id} onChange={(e) => updateLayout((l) => { l.targetItemId = e.target.value; })}>
@@ -103,16 +98,15 @@ export const ActivityPanel = () => {
                     )}
                     {t === 'bed-transfer' && p2 && (
                       <>
-                        <div className="row-label">How does she get onto the bed?</div>
-                        <Segmented label="Bed transfer method" value={s.bedMethod ?? 'hoist'} onChange={(bedMethod) => update({ bedMethod })} options={[{ value: 'hoist', label: 'Ceiling hoist (recorded)' }, { value: 'side', label: 'Side transfer (demo)' }]} />
+                        <div className="row-label">Method</div>
+                        <Segmented label="Bed transfer method" value={s.bedMethod ?? 'hoist'} onChange={(bedMethod) => update({ bedMethod })} options={[{ value: 'hoist', label: 'Ceiling hoist' }, { value: 'side', label: 'Side transfer' }]} />
                       </>
                     )}
                     {(t === 'bed-transfer' || t === 'toilet-transfer' || t === 'chair-transfer') && (
                       <>
-                        <div className="row-label">Transfer from which side?</div>
+                        <div className="row-label">Side</div>
                         <Segmented label="Transfer side" value={s.transferSide} onChange={(transferSide) => update({ transferSide })} options={[{ value: 'auto', label: 'Best fit' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }]} />
-                        <p className="hint">Left/right as you face the {t === 'bed-transfer' ? 'foot of the bed' : t === 'toilet-transfer' ? 'front of the toilet' : 'front of the seat'}.{s.transferSide === 'auto' && builtActive.side && <> Using the <b>{builtActive.side}</b> side.</>} The orange outline on the plan shows where the chair parks.</p>
-                        {builtActive.mh?.mirrored && <p className="caveat">The recorded transfer happened on the other side of the bed. It is shown <b>mirrored</b> here.</p>}
+                        {builtActive.mh?.mirrored && <p className="hint">Shown mirrored (recorded on the other side).</p>}
                       </>
                     )}
                     {t === 'imported' && imported.length > 1 && (
@@ -132,8 +126,7 @@ export const ActivityPanel = () => {
 
       {s.type === 'original' && (
         <Section title="About this recording">
-          <p className="muted">This is real motion capture from the original VisADLs project, played on the MetaHumans used in the study. The person's and carer's movements, the hoist bar and the wheelchair's path and turning are as recorded; the wheelchair is shown with the app's own powered-chair model. Skin and clothing colours are stand-ins until the original textures are exported.</p>
-          <p className="caveat">A recording shows how one person performed this activity on one occasion. It is not a prediction of how anyone else would move.</p>
+          <p className="muted">Played exactly as recorded, in its original room.</p>
         </Section>
       )}
       {s.type !== 'imported' && s.type !== 'original' && (
@@ -141,7 +134,6 @@ export const ActivityPanel = () => {
           <RouteSummary built={builtActive} layoutKey={active} />
           {compare && <RouteSummary built={builtOther} layoutKey={active === 'existing' ? 'proposed' : 'existing'} />}
           <Toggle checked={s.showSweptPath} onChange={(showSweptPath) => update({ showSweptPath })}>Show space used by the wheelchair</Toggle>
-          <p className="caveat">This is a visual guide to support discussion. It is not a clinical assessment or a guarantee that a design will work. The route is calculated automatically and real movement varies from person to person.</p>
         </Section>
       )}
 
@@ -149,13 +141,11 @@ export const ActivityPanel = () => {
         <div className="row-label">Who</div>
         <Segmented label="Character" value={s.character ?? 'figure'} onChange={(character) => update(character === 'p2' ? { character, chair: 'power' } : { character })}
           options={[{ value: 'p2', label: 'Persona 2 (VisADLs)' }, { value: 'figure', label: 'Simple figure' }]} />
-        {s.character === 'p2' && !p2Ready && <p className="hint">Persona 2 is only available in copies of the app that include the original VisADLs recordings.</p>}
-        {p2 && <p className="muted">Persona 2 from the original VisADLs project. Driving and the ceiling hoist transfer use her <b>recorded</b> movement; the other activities are <b>demonstration</b> movements made by the app, not motion capture.</p>}
+        {s.character === 'p2' && !p2Ready && <p className="hint">Persona 2 isn’t included in this copy.</p>}
         <div className="row-label">Wheelchair</div>
-        {p2 ? <p className="muted">Powered wheelchair, as in her recording.</p> : (
+        {p2 ? <p className="muted">Powered ({CHAIRS.power.width} × {CHAIRS.power.length} mm)</p> : (
           <Segmented label="Wheelchair" value={s.chair} onChange={(chair) => update({ chair })} options={[{ value: 'manual', label: 'Manual' }, { value: 'power', label: 'Powered' }]} />
         )}
-        <p className="muted">{CHAIRS[s.chair].label}: {CHAIRS[s.chair].width} wide × {CHAIRS[s.chair].length} long, seat {CHAIRS[s.chair].seatHeight} mm.</p>
         <Toggle checked={s.supportPerson} onChange={(supportPerson) => update({ supportPerson })}>Include a support person</Toggle>
         {!p2 && <>
         <label className="text">Name<input value={s.persona.name} onChange={(e) => persona({ name: e.target.value })} /></label>
@@ -165,16 +155,13 @@ export const ActivityPanel = () => {
         <div className="row-label">Top</div><Swatches label="Top" value={s.persona.top} colours={TOPS} onChange={(top) => persona({ top })} />
         <div className="row-label">Trousers</div><Swatches label="Trousers" value={s.persona.bottoms} colours={BOTTOMS} onChange={(bottoms) => persona({ bottoms })} />
         </>}
-        <p className="caveat">{p2 ? 'Recorded movements show how one person did an activity on one occasion; demo movements are made by the app. Neither shows how everyone moves.' : 'The simple figure’s movements are demonstrations made by the app, not motion capture. They show one way of doing an activity, not how everyone moves.'}</p>
       </Section>
 
       {ORIGINALS.some((r) => originalAvailable(r.id)) && (
-        <Section title="Original recordings (in their own room)" open={s.type === 'original'}>
-          <p className="muted">Play a recording exactly as it was captured, in the room where it happened. This replaces the current layout (you can undo).</p>
+        <Section title="Original recordings" open={s.type === 'original'}>
           {ORIGINALS.filter((r) => originalAvailable(r.id)).map((r) => (
             <button key={r.id} className={`card original ${s.type === 'original' && s.originalId === r.id ? 'on' : ''}`} onClick={() => chooseOriginal(r.id)}>
               <b>★ {r.title}</b>
-              <span>{r.blurb}</span>
             </button>
           ))}
         </Section>

@@ -4,12 +4,12 @@ import { Segmented, fmtTime } from './controls';
 
 const CAMERAS: { value: CameraPreset; label: string; title: string }[] = [
   { value: 'overview', label: 'Overview', title: 'Whole room from above at an angle' },
-  { value: 'top', label: 'From above', title: 'Straight down, like the floor plan' },
-  { value: 'seated', label: 'Seated eye level', title: 'What the person in the wheelchair sees' },
-  { value: 'support', label: 'Support person', title: 'Standing eye level' },
+  { value: 'top', label: 'Top', title: 'Straight down, like the floor plan' },
+  { value: 'seated', label: 'Seated', title: 'What the person in the wheelchair sees' },
+  { value: 'support', label: 'Carer', title: 'Standing eye level' },
   { value: 'follow', label: 'Follow', title: 'Follow behind the wheelchair' },
   { value: 'closeup', label: 'Close-up', title: 'Close view that follows the person' },
-  { value: 'free', label: 'Walk around', title: 'Move freely: W A S D or arrow keys to move, Q / E to turn, R / F up and down, Shift to go faster. Drag to look around.' },
+  { value: 'free', label: 'Walk', title: 'Move freely: W A S D or arrow keys to move, Q / E to turn, R / F up and down, Shift to go faster. Drag to look around.' },
 ];
 
 export const Timeline = () => {
@@ -56,15 +56,15 @@ export const Timeline = () => {
         <Segmented label="Speed" value={String(speed)} onChange={(v) => set({ speed: +v })} options={[{ value: '0.5', label: '½×' }, { value: '1', label: '1×' }, { value: '2', label: '2×' }, { value: '4', label: '4×' }]} />
       </div>
       <div className="tl-row cams">
-        <span className="row-label">View</span>
-        {CAMERAS.map((c) => (
-          <button key={c.value} className={camera === c.value ? 'on' : ''} onClick={() => selectCamera(c.value)} title={c.title}>{c.label}</button>
-        ))}
+        <div className="segmented" role="radiogroup" aria-label="View">
+          {CAMERAS.map((c) => (
+            <button key={c.value} role="radio" aria-checked={camera === c.value} className={camera === c.value ? 'on' : ''} onClick={() => selectCamera(c.value)} title={c.title}>{c.label}</button>
+          ))}
+        </div>
         <span className="spacer" />
-        <span className="row-label">Walls</span>
-        <Segmented<WallMode> label="Walls" value={wallMode} onChange={(wm) => set({ wallMode: wm })} options={[{ value: 'cutaway', label: 'Cut away' }, { value: 'low', label: 'Low' }, { value: 'full', label: 'Full' }]} />
-        <button className={labels ? 'on' : ''} onClick={() => toggleLabels()} title="Show or hide names, measurements and contact tags">{labels ? 'Labels on' : 'Labels off'}</button>
-        <button className={hq ? 'on' : ''} onClick={() => set({ highQuality: !hq })} title="Turn off on slower computers or tablets">{hq ? 'High quality' : 'Fast mode'}</button>
+        <Segmented<WallMode> label="Walls" value={wallMode} onChange={(wm) => set({ wallMode: wm })} options={[{ value: 'cutaway', label: 'Cut away' }, { value: 'low', label: 'Low walls' }, { value: 'full', label: 'Full' }]} />
+        <button className={`icon-toggle ${labels ? 'on' : ''}`} onClick={() => toggleLabels()} title={labels ? 'Hide labels' : 'Show labels'} aria-pressed={labels}>Aa</button>
+        <button className={`icon-toggle ${hq ? 'on' : ''}`} onClick={() => set({ highQuality: !hq })} title={hq ? 'High quality (turn off on slower devices)' : 'Fast mode'} aria-pressed={hq}>HQ</button>
       </div>
     </div>
   );

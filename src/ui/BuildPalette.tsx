@@ -117,7 +117,6 @@ const RampDialog = ({ onClose }: { onClose: () => void }) => {
     <div className="modal" role="dialog" aria-modal="true" aria-label="Ramp">
       <div className="modal-card">
         <h2>Ramp</h2>
-        <p className="muted">Answer these and the ramp is drawn for you. Then click where it goes; it rises towards the top of the plan – turn it with R or the Turn buttons.</p>
         <div className="grid2">
           <NumberField label="Height to climb (rise)" value={rise} onChange={setRise} step={10} min={10} max={1500} />
           <NumberField label="Ramp width" value={width} onChange={setWidth} step={50} min={700} max={2500} />
@@ -128,7 +127,6 @@ const RampDialog = ({ onClose }: { onClose: () => void }) => {
         <div className="row-label">Handrails</div>
         <Segmented label="Handrails" value={rails} onChange={setRails} options={[{ value: 'both', label: 'Both sides' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }, { value: 'none', label: 'None' }]} />
         <p className="callout">Length <b>{len} mm</b> ({Math.round(rise * gradient)} mm slope + {landing} mm landing). {rampNote(r)}</p>
-        <p className="caveat">A guide only – check current standards and the site before prescribing.</p>
         <div className="btnrow">
           <button className="primary" onClick={() => { set({ tool: 'place', selection: null, placing: { what: 'item', kind: 'ramp', label: 'Ramp', over: { w: width, d: len, h: rise, ramp: r } } }); onClose(); }}>Place the ramp</button>
           <button onClick={onClose}>Cancel</button>
@@ -144,11 +142,10 @@ const TemplatesDialog = ({ onClose }: { onClose: () => void }) => {
     <div className="modal" role="dialog" aria-modal="true" aria-label="Bathroom layouts">
       <div className="modal-card">
         <h2>Bathroom layouts</h2>
-        <p className="muted">Pick a layout, then click inside the bathroom on the plan or in 3D. You can move and resize everything afterwards (and undo).</p>
         <div className="activity-list">
           {BATHROOM_TEMPLATES.map((t) => (
             <button key={t.id} className="card" onClick={() => { set({ tool: 'place', selection: null, placing: { what: 'template', id: t.id, label: t.label } }); onClose(); }}>
-              <b>{t.label}</b><span>{t.blurb} (Room at least {t.min[0]} × {t.min[1]} mm.)</span>
+              <b>{t.label}</b><span>Min. room {t.min[0]} × {t.min[1]} mm</span>
             </button>
           ))}
         </div>

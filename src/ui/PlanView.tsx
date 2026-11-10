@@ -866,7 +866,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         )}
       </svg>
 
-      {panel !== 'room' && <div className="plan-edit-tools" role="toolbar" aria-label="Plan tools">
+      {false && <div className="plan-edit-tools" role="toolbar" aria-label="Plan tools">
         {([['select', 'Select', 'Select and move things', '↖'], ['draw-wall', 'Walls', 'Draw new walls', '✎'], ['add-room', 'Room', 'Add a room', '▭'], ['split-wall', 'Split', 'Split a wall so part of it can move', '✂'], ['add-label', 'Name', 'Write a room name on the plan', 'T']] as const).map(([t, label, title, icon]) => (
           <button key={t} className={tool === t ? 'on' : ''} onClick={() => set({ tool: t, selection: t === 'select' ? selection : null })} title={title} aria-label={title}>
             <span aria-hidden>{icon}</span> {label}
@@ -874,37 +874,35 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         ))}
       </div>}
       <div className="plan-tools">
-        <button className={`labels-toggle ${labels ? 'on' : ''}`} onClick={() => toggleLabels()} title={labels ? 'Hide names and measurements' : 'Show names and measurements'} aria-pressed={labels}>Aa</button>
         <button onClick={() => setVb((v) => ({ x: v.x + v.w * 0.1, y: v.y + v.h * 0.1, w: v.w * 0.8, h: v.h * 0.8 }))} aria-label="Zoom in">＋</button>
         <button onClick={() => setVb((v) => ({ x: v.x - v.w * 0.125, y: v.y - v.h * 0.125, w: v.w * 1.25, h: v.h * 1.25 }))} aria-label="Zoom out">－</button>
         <button onClick={fit}>Fit</button>
       </div>
       {detecting && <div className="tool-banner">Finding walls…</div>}
-      {detection && <div className="tool-banner review">Review the walls found (blue), doors (red), windows (teal) and openings (orange), then choose “Use these walls” in the side panel.</div>}
-      {!detection && layout.unverified && tool === 'select' && <div className="verify-flag">Walls found automatically · measurements not yet checked</div>}
+      {detection && <div className="tool-banner review">Check the walls found, then choose “Use these walls”.</div>}
+      {!detection && layout.unverified && tool === 'select' && <div className="verify-flag">Measurements not checked</div>}
       {tool !== 'select' && (
         <div className="tool-banner">
-          {tool === 'draw-room' && 'Click each corner of the room. Click the first corner again to finish. (Esc to cancel)'}
+          {tool === 'draw-room' && 'Click each corner; click the first again to finish'}
           {tool === 'draw-wall' && (draw.length === 0
-            ? (bgNow ? 'Click a corner of a wall on the plan – the green ring means it has found a wall drawn there.' : 'Click where the wall starts – it snaps to corners and onto existing walls.')
-            : 'Click the next corner, or type a length in mm and press Enter. Enter or Esc to finish. Right-drag or hold Space to move around.')}
-          {tool === 'move-plan' && 'Drag the plan to line it up. Choose Select when it is in place.'}
-          {tool === 'add-room' && 'Drag from one corner of the new room to the opposite corner. Sides that run along existing walls join them.'}
-          {tool === 'split-wall' && 'Click a wall where you want to cut it. Each piece can then be moved on its own.'}
-          {tool === 'add-label' && 'Click where the room name should go.'}
+            ? 'Click where the wall starts'
+            : 'Next corner, or type a length + Enter · Esc to finish')}
+          {tool === 'move-plan' && 'Drag to line up the plan'}
+          {tool === 'add-room' && 'Drag from corner to corner'}
+          {tool === 'split-wall' && 'Click a wall to split it'}
+          {tool === 'add-label' && 'Click to place the name'}
           {tool === 'place' && <PlaceHint />}
           {tool === 'calibrate' && (calib.length === 0
-            ? 'Set the scale, step 1 of 2: click one end of a measurement you know – e.g. the end of an overall dimension line. (Scroll to zoom, right-drag to move.)'
-            : 'Step 2 of 2: click the other end.')}
-          {tool === 'pin-note' && 'Click on the plan where the note applies.'}
-          {tool === 'detect-area' && !detecting && 'Drag a box around the floor you want to turn into 3D. (Esc to cancel)'}
+            ? 'Scale: click one end of a known measurement'
+            : 'Now click the other end')}
+          {tool === 'pin-note' && 'Click to pin the note'}
+          {tool === 'detect-area' && !detecting && 'Drag a box around the area'}
         </div>
       )}
       <div className="plan-legend">
         <span><i className="lg route" /> route</span>
-        {settings.showSweptPath && <span><i className="lg swept" /> space used by chair</span>}
-        <span><i className="lg contact" /> possible contact</span>
-        <span>Numbers in mm</span>
+        {settings.showSweptPath && <span><i className="lg swept" /> chair space</span>}
+        <span><i className="lg contact" /> contact</span>
       </div>
     </div>
   );
@@ -913,5 +911,5 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 const PlaceHint = () => {
   const pl = useStore((s) => s.placing);
   if (!pl) return null;
-  return <>{pl.what === 'opening' ? `Click on a wall to add the ${pl.label.toLowerCase()}.` : pl.what === 'template' ? `Click inside the room to lay out: ${pl.label}.` : `Click to place the ${pl.label.toLowerCase()}${pl.what === 'item' ? ' – wall items go against the nearest wall' : ''}. (Esc to cancel)`}</>;
+  return <>{pl.what === 'opening' ? `Click a wall to add the ${pl.label.toLowerCase()}` : pl.what === 'template' ? 'Click inside the bathroom' : `Click to place · Esc to cancel`}</>;
 };

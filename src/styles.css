@@ -374,3 +374,15 @@ button small.sub { font-size: 10px; opacity: .7; margin-left: 2px; }
 .elevs figcaption { font-size: 13px; color: #444; }
 .elev { width: 100%; height: auto; max-height: 220px; background: #fff; }
 table.mods td:first-child { width: 2em; text-align: right; color: #666; }
+
+/* quieter chrome */
+.tool-banner { background: rgba(29, 39, 51, 0.82); font-weight: 500; font-size: 13px; padding: 6px 12px; border-radius: 999px; }
+.tool-banner.review { background: rgba(21, 101, 192, 0.9); }
+.verify-flag { font-weight: 500; font-size: 12px; padding: 4px 8px; }
+.plan-legend { font-size: 11px; gap: 10px; background: transparent; }
+.result { font-size: 13px; padding: 8px 10px; }
+.cams .segmented button { min-height: 34px; padding: 4px 11px; font-size: 13px; }
+.icon-toggle { min-width: 40px; min-height: 34px; padding: 4px 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.icon-toggle.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.tl-row { flex-wrap: nowrap; }
+.tl-row.cams { flex-wrap: wrap; }

@@ -10,14 +10,14 @@ import {
 } from './poses';
 
 export const ACTIVITY_INFO: Record<ActivityType, { label: string; needs?: string[]; blurb: string }> = {
-  navigate: { label: 'Move around the room', blurb: 'Wheelchair travels from the start point to the end point. Drag the green and blue markers on the plan.' },
-  'bed-transfer': { label: 'Bed transfer', needs: ['bed-queen', 'bed-single', 'bed-adjustable'], blurb: 'Approach the bed, side transfer onto the bed, then lie down.' },
-  'toilet-transfer': { label: 'Toilet transfer', needs: ['toilet'], blurb: 'Approach the toilet and side transfer onto the seat.' },
-  basin: { label: 'Use the basin', needs: ['basin', 'vanity', 'kitchen-bench'], blurb: 'Forward approach to the basin and reach the tap.' },
-  cupboard: { label: 'Open a cupboard', needs: ['kitchen-bench', 'tv-unit', 'drawers', 'wardrobe'], blurb: 'Approach a cupboard, open the door, reach in and take something out. (Demonstration movement, not motion capture.)' },
-  'chair-transfer': { label: 'Move onto a chair or sofa', needs: ['armchair', 'sofa', 'dining-chair'], blurb: 'Park beside a chair or sofa and side transfer onto the seat. (Demonstration movement, not motion capture.)' },
-  imported: { label: 'Imported animation', blurb: 'Plays the animation stored in an imported 3D model (e.g. original VisADLs motion capture).' },
-  original: { label: 'Original VisADLs recording', blurb: 'Real motion capture from the original VisADLs project, in the room where it was recorded.' },
+  navigate: { label: 'Move around the room', blurb: 'From S to E – drag the markers on the plan.' },
+  'bed-transfer': { label: 'Bed transfer', needs: ['bed-queen', 'bed-single', 'bed-adjustable'], blurb: '' },
+  'toilet-transfer': { label: 'Toilet transfer', needs: ['toilet'], blurb: '' },
+  basin: { label: 'Use the basin', needs: ['basin', 'vanity', 'kitchen-bench'], blurb: '' },
+  cupboard: { label: 'Open a cupboard', needs: ['kitchen-bench', 'tv-unit', 'drawers', 'wardrobe'], blurb: '' },
+  'chair-transfer': { label: 'Move onto a chair or sofa', needs: ['armchair', 'sofa', 'dining-chair'], blurb: '' },
+  imported: { label: 'Imported animation', blurb: '' },
+  original: { label: 'Original VisADLs recording', blurb: '' },
 };
 
 export interface BodyState {
@@ -400,10 +400,10 @@ const buildActivityInner = (layout: Layout, settings: ActivitySettings, imported
       return { ...personTravel(T0), x: w.x, y: w.y, z: (tr[2] - (rec.scene.floorZ ?? 0)) * 10 + liftAt(tau(t)) };
     };
     const phases2: Phase[] = [
-      { t: 0, label: 'Drive to the bed' },
-      { t: T0, label: 'Ready (2× speed)' },
-      { t: tB + d1, label: 'Hoist lift (real speed)' },
-      { t: tB + d1 + d2, label: 'On the bed (3× speed)' },
+      { t: 0, label: 'Drive' },
+      { t: T0, label: 'Ready' },
+      { t: tB + d1, label: 'Hoist' },
+      { t: tB + d1 + d2, label: 'On bed' },
     ];
     return {
       type, duration: tB + d1 + d2 + d3 + 2, route, phases: phases2, target, problem, side: s > 0 ? 'right' : 'left',
