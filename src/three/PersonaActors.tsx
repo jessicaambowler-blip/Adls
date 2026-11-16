@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { P2_ID, type Anchor, type BodyState, type BuiltActivity, type Mix, type Src } from '../activities/activities';
 import { BONES, getOriginal, sampleTrack, type AnimData, type LoadedOriginal, type PersonSpec } from '../originals/originals';
 import { useStore } from '../model/store';
-import type { ActivitySettings } from '../model/types';
+import type { ActivitySettings, Layout } from '../model/types';
+import { groundAt } from '../model/ground';
 import { CONV, buildPerson, loadFbx, makeRetarget, mat, poseLocals, type PersonRig, type Retarget } from './metahuman';
 import { buildManualChair, buildPowerChair } from './wheelchair';
 
@@ -130,7 +131,8 @@ const apply = (b: Body, f: Frame) => {
 
 // ------------------------------------------------------------------ component
 
-export const PersonaActors = ({ built, settings, live }: { built: BuiltActivity; settings: ActivitySettings; live: { person?: unknown; helper?: unknown; chair?: THREE.Object3D } }) => {
+export const PersonaActors = ({ built, settings, live, layout }: { built: BuiltActivity; settings: ActivitySettings; live: { person?: unknown; helper?: unknown; chair?: THREE.Object3D }; layout: Layout }) => {
+  const lift = useMemo(() => new THREE.Group(), []);
   const assetVersion = useStore((s) => s.assetVersion);
   const o = getOriginal(P2_ID);
   const [cast, setCast] = useState<Cast | null>(null);
@@ -152,7 +154,9 @@ export const PersonaActors = ({ built, settings, live }: { built: BuiltActivity;
   useFrame(() => {
     const t = useStore.getState().time;
     const c = built.chair(t);
-    chair.root.position.set(c.x / 1000, 0, c.y / 1000);
+    const gc = groundAt(layout, c) / 1000;
+    chair.root.position.set(c.x / 1000, gc, c.y / 1000);
+    lift.position.y = gc;
     chair.root.rotation.y = THREE.MathUtils.degToRad(-c.heading);
     { const sp = chairOf(settings), base = CHAIRS[settings.chair]; chair.root.scale.set(sp.width / base.width, 1, sp.length / base.length); }
     for (const w of chair.wheels) w.obj.rotation.x = c.wheelTurn / 1000 / w.radius;
@@ -184,7 +188,7 @@ export const PersonaActors = ({ built, settings, live }: { built: BuiltActivity;
   return (
     <>
       <primitive object={chair.root} />
-      {cast && <primitive object={cast.person.root} />}
+      <primitive object={lift}>{cast && <primitive object={cast.person.root} />}</primitive>
       {cast?.carer && <primitive object={cast.carer.root} />}
       {cast?.hoist && <primitive object={cast.hoist} />}
     </>

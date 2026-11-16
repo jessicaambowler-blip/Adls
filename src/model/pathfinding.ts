@@ -1,5 +1,6 @@
 import { itemBlocks, itemLabel } from './catalogue';
-import { dirOfHeading, dist, headingOf, itemCorners, layoutBounds, polygonsOverlap, rotate, solidWallRects, sub, wallDir, wallNormal, wallPoint } from './geometry';
+import { surfaceInfo } from './ground';
+import { dirOfHeading, dist, headingOf, itemCorners, itemToLocal, layoutBounds, polygonsOverlap, rotate, solidWallRects, sub, wallDir, wallNormal, wallPoint } from './geometry';
 import type { Layout, Vec2 } from './types';
 
 export interface PoseSample { x: number; y: number; heading: number; t: number; dist: number; /** the chair outline overlaps a wall or furniture here */ hit?: boolean }
@@ -45,6 +46,8 @@ export const obstaclesOf = (layout: Layout, ignoreIds: string[] = []): Obstacle[
 class Grid {
   w: number; h: number; ox: number; oy: number;
   blocked: Uint8Array; clearance: Float32Array;
+  /** cells on rough ground (lawn, gravel) – passable but avoided where a smooth path exists */
+  rough: Uint8Array;
   constructor(layout: Layout, obstacles: Obstacle[], extra: Vec2[]) {
     const b = layoutBounds(layout);
     const xs = [b.minX, b.maxX, ...extra.map((p) => p.x)];
@@ -54,6 +57,19 @@ class Grid {
     this.w = Math.ceil((Math.max(...xs) + 1200 - this.ox) / CELL);
     this.h = Math.ceil((Math.max(...ys) + 1200 - this.oy) / CELL);
     this.blocked = new Uint8Array(this.w * this.h);
+    this.rough = new Uint8Array(this.w * this.h);
+    const surf = layout.items.filter((it) => it.kind === 'surface' || it.kind === 'ramp');
+    if (surf.length) for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
+      const p = this.centre(i, j);
+      let r = 0;
+      for (const it of surf) {
+        const q = itemToLocal(it, p);
+        if (Math.abs(q.x) > it.w / 2 || Math.abs(q.y) > it.d / 2) continue;
+        if (it.kind === 'ramp' || !surfaceInfo(it.surface).rough) { r = 0; break; } // a path or ramp over lawn is smooth
+        r = 1;
+      }
+      this.rough[j * this.w + i] = r;
+    }
     for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
       const p = this.centre(i, j);
       for (const o of obstacles) {
@@ -84,6 +100,7 @@ class Grid {
   }
   centre(i: number, j: number): Vec2 { return { x: this.ox + (i + 0.5) * CELL, y: this.oy + (j + 0.5) * CELL }; }
   cellOf(p: Vec2) { return { i: Math.max(0, Math.min(this.w - 1, Math.floor((p.x - this.ox) / CELL))), j: Math.max(0, Math.min(this.h - 1, Math.floor((p.y - this.oy) / CELL))) }; }
+  isRough(p: Vec2) { const { i, j } = this.cellOf(p); return !!this.rough[j * this.w + i]; }
   clearAt(p: Vec2) { const { i, j } = this.cellOf(p); return this.clearance[j * this.w + i]; }
 
   astar(from: Vec2, to: Vec2, radius: number): Vec2[] | null {
@@ -117,7 +134,7 @@ class Grid {
         if (!ok(nk) && nk !== gk) continue;
         const step = (di && dj ? Math.SQRT2 : 1) * CELL;
         const penalty = Math.max(0, comfort - this.clearance[nk]) * 0.8; // prefer the middle of corridors
-        const ng = gScore[k] + step + penalty * step / CELL;
+        const ng = gScore[k] + step * (this.rough[nk] ? 12 : 1) + penalty * step / CELL;
         if (ng < gScore[nk]) { gScore[nk] = ng; came[nk] = k; f[nk] = ng + h(nk); push(nk); }
       }
     }
@@ -137,6 +154,16 @@ class Grid {
     }
     return true;
   }
+
+  /** does a straight line cross rough ground? */
+  lineRough(a: Vec2, b: Vec2) {
+    const n = Math.ceil(dist(a, b) / (CELL / 2));
+    for (let s = 1; s < n; s++) {
+      const { i, j } = this.cellOf({ x: a.x + ((b.x - a.x) * s) / n, y: a.y + ((b.y - a.y) * s) / n });
+      if (this.rough[j * this.w + i]) return true;
+    }
+    return false;
+  }
 }
 
 const simplify = (grid: Grid, pts: Vec2[], radius: number) => {
@@ -145,7 +172,8 @@ const simplify = (grid: Grid, pts: Vec2[], radius: number) => {
   let i = 0;
   while (i < pts.length - 1) {
     let j = pts.length - 1;
-    while (j > i + 1 && !grid.lineClear(pts[i], pts[j], radius)) j--;
+    // shortcuts must not cut across lawn or gravel when the planned path went round it
+    while (j > i + 1 && (!grid.lineClear(pts[i], pts[j], radius) || (grid.lineRough(pts[i], pts[j]) && !pts.slice(i, j + 1).some((q) => grid.isRough(q))))) j--;
     out.push(pts[j]); i = j;
   }
   return out;
@@ -202,7 +230,7 @@ export interface RouteRequest {
  * wall's normal. Without this, the smoothed path cuts diagonally across narrow doorways and a long
  * chair clips the frame.
  */
-const alignDoors = (layout: Layout, path: Vec2[], lead = 650): Vec2[] => {
+const alignDoors = (layout: Layout, path: Vec2[], lead = 650, room?: (p: Vec2) => boolean): Vec2[] => {
   const doors = layout.openings.filter((o) => o.kind !== 'window').map((o) => {
     const w = layout.walls.find((x) => x.id === o.wallId);
     return w ? { c: wallPoint(w, o.offset), d: wallDir(w), n: wallNormal(w), half: o.width / 2 } : null;
@@ -219,11 +247,22 @@ const alignDoors = (layout: Layout, path: Vec2[], lead = 650): Vec2[] => {
       const x = { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
       if (Math.abs((x.x - dr.c.x) * dr.d.x + (x.y - dr.c.y) * dr.d.y) > dr.half + 100) continue;
       const s = Math.sign(sq - sp);
-      // before the door: no further back than where the segment starts; after it: the full lead,
-      // so the whole chair is through before it turns
-      const l0 = Math.min(lead, Math.abs(sp) - 1);
+      // line up square before the door: the full lead where there is room for the chair there,
+      // otherwise no further back than where the segment starts
+      const full = { x: dr.c.x - dr.n.x * s * lead, y: dr.c.y - dr.n.y * s * lead };
+      const roomy = !!room?.(full);
+      const l0 = roomy ? lead : Math.min(lead, Math.abs(sp) - 1);
       if (l0 < 150) continue;
-      hits.push({ t, pts: [{ x: dr.c.x - dr.n.x * s * l0, y: dr.c.y - dr.n.y * s * l0 }, { x: dr.c.x + dr.n.x * s * lead, y: dr.c.y + dr.n.y * s * lead }] });
+      // with room to line up, drop the points that would have the chair cutting across in front of the door
+      if (roomy) while (out.length > 1) {
+        const z = out[out.length - 1], sz = -s * ((z.x - dr.c.x) * dr.n.x + (z.y - dr.c.y) * dr.n.y);
+        if (sz > 0 && sz < lead && Math.abs((z.x - dr.c.x) * dr.d.x + (z.y - dr.c.y) * dr.d.y) < dr.half + lead) out.pop(); else break;
+      }
+      // (each point twice so the smoothing passes straight through the doorway instead of cutting the corner)
+      // after it: no further than where the segment ends, so the chair never overshoots and backs up
+      const l1 = Math.min(lead, Math.abs(sq) - 1);
+      const before = { x: dr.c.x - dr.n.x * s * l0, y: dr.c.y - dr.n.y * s * l0 }, after = { x: dr.c.x + dr.n.x * s * l1, y: dr.c.y + dr.n.y * s * l1 };
+      hits.push({ t, pts: l1 < 150 ? [before, { ...before }] : [before, { ...before }, after, { ...after }] });
     }
     hits.sort((a, b) => a.t - b.t).forEach((h) => out.push(...h.pts));
     out.push(q);
@@ -243,7 +282,7 @@ export const planRoute = (layout: Layout, req: RouteRequest): RouteResult => {
   let path: Vec2[] | null = null;
   for (const [r, st] of [[half + 60, 'clear'], [half + 10, 'tight'], [half - 60, 'tight']] as const) {
     path = grid.astar(req.start, preGoal, r);
-    if (path) { status = st; path = alignDoors(layout, simplify(grid, path, r), req.chairLength / 2 + 250); break; }
+    if (path) { status = st; path = alignDoors(layout, simplify(grid, path, r), req.chairLength / 2 + 250, (q) => grid.clearAt(q) >= r); break; }
   }
   if (!path) { status = 'blocked'; path = [req.start, preGoal]; }
   if (approach !== 0) path.push({ x: req.goal.x, y: req.goal.y });
@@ -261,7 +300,10 @@ export const planRoute = (layout: Layout, req: RouteRequest): RouteResult => {
   const withHeading: { x: number; y: number; heading: number }[] = [{ ...req.start }];
   let lastH = req.start.heading;
   for (let i = 1; i < dense.length; i++) {
-    const look = dense[Math.min(dense.length - 1, i + 3)];
+    // look far enough ahead that tiny sideways jogs don't swing the chair round
+    let j = Math.min(dense.length - 1, i + 3);
+    while (j < dense.length - 1 && dist(dense[j], dense[i - 1]) < 60) j++;
+    const look = dense[j];
     const d = sub(look, dense[i - 1]);
     if (req.goal.heading !== undefined && dist(dense[i], req.goal) < Math.abs(approach) - 20) {
       // keep the final (forward or reversing) approach aligned with the goal heading

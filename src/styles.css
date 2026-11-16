@@ -419,3 +419,11 @@ table.mods td:first-child { width: 2em; text-align: right; color: #666; }
 .signoff { display: flex; gap: 28px; flex-wrap: wrap; margin: 28px 0 8px; font-size: 14px; }
 @media print { .page-break { break-before: page; } .summary-doc h2, .summary-doc h3 { break-after: avoid; } .elevs figure, tr, .two-col { break-inside: avoid; } }
 table.mods.clear-table td:first-child { text-align: left; color: inherit; width: auto; }
+
+.surface { stroke: rgba(0,0,0,.18); stroke-width: 10; fill-opacity: .55; }
+.carspace { fill: rgba(120,120,120,.08); stroke: #8a8f99; stroke-width: 30; }
+.carspace-zone { fill: rgba(245, 211, 60, .25); stroke: none; }
+.tree-canopy { fill: rgba(91, 138, 63, .3); stroke: rgba(70,110,50,.6); stroke-width: 20; }
+.tree-trunk { fill: #6d5240; }
+.fence-sym { fill: #b08a62; }
+.result .problem.soft { color: #8a5200; font-weight: 500; }

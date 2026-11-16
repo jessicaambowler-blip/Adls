@@ -21,6 +21,7 @@ import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
 import { PersonaActors } from './PersonaActors';
 import { placeAt } from '../ui/placeFlow';
+import { floorAt, groundAt } from '../model/ground';
 import { useClearances } from '../activities/useClearances';
 import { getOriginal, originalMissing } from '../originals/originals';
 import { P2_ID } from '../activities/activities';
@@ -120,6 +121,8 @@ const Floor = ({ layout }: { layout: Layout }) => {
   const w = (b.maxX - b.minX - 2 * t) / 1000, d = (b.maxY - b.minY - 2 * t) / 1000;
   const mat = useMemo(() => floorMaterial(layout, w, d), [layout.floor, w, d]); // eslint-disable-line react-hooks/exhaustive-deps
   const ceil = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f6f5f2', roughness: 0.95 }), []);
+  const all = layoutBounds(layout);
+  const gy = (layout.ground ?? 0) / 1000;
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[(b.minX + b.maxX) / 2000, 0, (b.minY + b.maxY) / 2000]} receiveShadow material={mat}>
@@ -129,11 +132,18 @@ const Floor = ({ layout }: { layout: Layout }) => {
       <mesh rotation-x={Math.PI / 2} position={[(b.minX + b.maxX) / 2000, layout.ceilingHeight / 1000, (b.minY + b.maxY) / 2000]} material={ceil}>
         <planeGeometry args={[w + 0.2, d + 0.2]} />
       </mesh>
-      {/* surrounding ground (outside the room) */}
-      <mesh rotation-x={-Math.PI / 2} position={[(b.minX + b.maxX) / 2000, -0.003, (b.minY + b.maxY) / 2000]} receiveShadow>
-        <planeGeometry args={[w + 14, d + 14]} />
+      {/* surrounding ground (outside the house), at the ground level */}
+      <mesh rotation-x={-Math.PI / 2} position={[(all.minX + all.maxX) / 2000, gy - 0.003, (all.minY + all.maxY) / 2000]} receiveShadow>
+        <planeGeometry args={[(all.maxX - all.minX) / 1000 + 14, (all.maxY - all.minY) / 1000 + 14]} />
         <meshStandardMaterial color="#cfd2cc" roughness={1} />
       </mesh>
+      {/* the house's slab edge when the floor sits above the ground */}
+      {gy < -0.01 && (
+        <mesh position={[(b.minX + b.maxX) / 2000, gy / 2, (b.minY + b.maxY) / 2000]} receiveShadow castShadow>
+          <boxGeometry args={[(b.maxX - b.minX) / 1000, -gy, (b.maxY - b.minY) / 1000]} />
+          <meshStandardMaterial color="#9f9a92" roughness={0.95} />
+        </mesh>
+      )}
     </group>
   );
 };
@@ -263,12 +273,12 @@ const SelectionBox = ({ item }: { item: Item }) => {
   return <Line points={pts} color="#ff8a00" lineWidth={3} />;
 };
 
-const ItemMesh = ({ item, selected, layoutKey }: { item: Item; selected: boolean; layoutKey: LayoutKey }) => {
+const ItemMesh = ({ item, selected, layoutKey, base = 0 }: { item: Item; selected: boolean; layoutKey: LayoutKey; base?: number }) => {
   const obj = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color, JSON.stringify(item.ramp)]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = useStore((s) => s.set);
   return (
     <group
-      position={[item.x / 1000, 0, item.y / 1000]}
+      position={[item.x / 1000, base / 1000, item.y / 1000]}
       rotation-y={THREE.MathUtils.degToRad(-item.rotation)}
       onClick={(e) => { if (useStore.getState().tool !== 'select') return; e.stopPropagation(); select({ selection: { type: 'item', id: item.id } }); }}
       onPointerDown={(e) => {
@@ -336,7 +346,7 @@ const Items = ({ layout, settings, layoutKey }: { layout: Layout; settings: Acti
         it.kind === 'imported' ? (
           <ImportedItem key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} settings={settings} />
         ) : (
-          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} layoutKey={layoutKey} />
+          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} layoutKey={layoutKey} base={floorAt(layout, it)} />
         ),
       )}
     </>
@@ -345,7 +355,7 @@ const Items = ({ layout, settings, layoutKey }: { layout: Layout; settings: Acti
 
 // ---------------------------------------------------------------- people & equipment
 
-const Actors = ({ built, settings, live }: { built: BuiltActivity; settings: ActivitySettings; live: Live }) => {
+const Actors = ({ built, settings, live, layout }: { built: BuiltActivity; settings: ActivitySettings; live: Live; layout: Layout }) => {
   const chair: ChairRig = useMemo(() => (settings.chair === 'manual' ? buildManualChair() : buildPowerChair()), [settings.chair]);
   const person = useMemo(() => buildAvatar(settings.persona), [settings.persona]);
   const helper = useMemo(() => buildAvatar(SUPPORT_PERSONA, 'support'), []);
@@ -360,12 +370,13 @@ const Actors = ({ built, settings, live }: { built: BuiltActivity; settings: Act
   useFrame(() => {
     const t = useStore.getState().time;
     const c = built.chair(t);
-    chair.root.position.set(c.x / 1000, 0, c.y / 1000);
+    const gc = groundAt(layout, c) / 1000;
+    chair.root.position.set(c.x / 1000, gc, c.y / 1000);
     chair.root.rotation.y = THREE.MathUtils.degToRad(-c.heading);
     { const sp = chairOf(settings), base = CHAIRS[settings.chair]; chair.root.scale.set(sp.width / base.width, 1, sp.length / base.length); }
     for (const w of chair.wheels) w.obj.rotation.x = c.wheelTurn / 1000 / w.radius;
     const place = (rig: AvatarRig, s: ReturnType<BuiltActivity['person']>) => {
-      rig.root.position.set(s.x / 1000, s.z / 1000, s.y / 1000);
+      rig.root.position.set(s.x / 1000, s.z / 1000 + groundAt(layout, s) / 1000, s.y / 1000);
       q1.setFromAxisAngle(Y, THREE.MathUtils.degToRad(-s.heading));
       q2.setFromAxisAngle(X, THREE.MathUtils.degToRad(s.pitch));
       rig.root.quaternion.copy(q1).multiply(q2);
@@ -721,8 +732,8 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       <SelectionDims layout={layout} />
       {settings.type === 'original' && <OriginalActors built={built} live={live as never} />}
       {settings.type !== 'imported' && settings.type !== 'original' && (built.mh
-        ? <PersonaActors built={built} settings={settings} live={live} />
-        : <Actors built={built} settings={settings} live={live} />)}
+        ? <PersonaActors built={built} settings={settings} live={live} layout={layout} />
+        : <Actors built={built} settings={settings} live={live} layout={layout} />)}
       {built.props && <ActivityProps built={built} />}
       {settings.type !== 'imported' && settings.type !== 'original' && <RouteOverlay built={built} settings={settings} />}
       <Pins layoutKey={layoutKey} />

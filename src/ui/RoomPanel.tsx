@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { CATALOGUE, catalogueEntry, itemLabel } from '../model/catalogue';
 import { clearOpening, layoutCentre, uid, wallLength, wallNormal, wallPoint } from '../model/geometry';
 import { rampLength, rampNote } from '../model/place';
+import { SURFACES, surfaceInfo } from '../model/ground';
 import { applyWallDrag, beginWallDrag, removeWall, setWallLength, splitAtJunctions, splitWall, tidyWalls } from '../model/walls';
 import { rectInfo, setRoomSize } from '../model/edit';
 import { useStore } from '../model/store';
@@ -84,6 +85,9 @@ const ItemInspector = ({ it }: { it: Item }) => {
   return (
     <div className="inspector">
       <h3>{itemLabel(it.kind, it.label)}</h3>
+      {it.kind === 'surface' && (
+        <Segmented label="Surface" value={it.surface ?? 'lawn'} onChange={(surface) => up({ surface, label: surfaceInfo(surface).label })} options={SURFACES.map((x) => ({ value: x.id, label: x.label }))} />
+      )}
       {it.ramp && (() => {
         const r = it.ramp;
         const upR = (p: Partial<NonNullable<Item['ramp']>>) => { const nr = { ...r, ...p }; up({ ramp: nr, d: rampLength(nr), h: nr.rise }); };
@@ -427,6 +431,7 @@ export const RoomPanel = () => {
             <NumberField label="Inside depth" value={rect.depth} onChange={(v) => updateLayout((l) => setRoomSize(l, undefined, v))} step={50} min={800} />
           </div>
         ) : null}
+        <NumberField label="Ground outside (vs floor)" value={layout.ground ?? 0} onChange={(v) => updateLayout((l) => { l.ground = Math.min(0, v); })} step={50} min={-1500} max={0} />
         <NumberField label="Ceiling height" value={layout.ceilingHeight} onChange={(v) => updateLayout((l) => { l.ceilingHeight = v; })} step={50} min={2100} max={4000} />
         <div className="row-label">Floor</div>
         <Segmented label="Floor finish" value={layout.floor} options={FLOORS} onChange={(floor) => updateLayout((l) => { l.floor = floor; })} />

@@ -31,6 +31,8 @@ export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layou
       {r.status === 'tight' && <>Tight{r.minSideClearance > 0 && r.minSideClearance < 999 && <> – about {r.minSideClearance} mm each side</>}.{contacts.length > 0 && <> Bumps: {contacts.join(', ')}.</>}</>}
       {r.status === 'blocked' && <>No route for a {C.width} mm chair.</>}
       {built.narrow && <div className="problem">Too narrow at {built.narrow.where}.</div>}
+      {built.steps && <div className="problem">Goes over a {built.steps.join(' and a ')} – not possible in a wheelchair.</div>}
+      {built.rough && <div className="problem soft">Crosses {built.rough.join(' and ')} – hard going in a wheelchair.</div>}
       {built.problem && <div className="problem">{built.problem}</div>}
       {unverified && <div className="problem">Measurements not yet checked.</div>}
     </div>

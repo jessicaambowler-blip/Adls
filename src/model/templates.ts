@@ -224,7 +224,7 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
   if (!P) items.push(makeItem('hall-table', 8300, 5100 - 55 - 175, 180, { w: 1000 }), makeItem('plant', 10700, 4600));
   // ---- living (x 0–6000, y 5100–10000)
   items.push(makeItem('tv-unit', 55 + 210, 7500, -90), makeItem('sofa', 2600, 7500, 90));
-  items.push(P ? makeItem('armchair', 5300, 9150, 90) : makeItem('armchair', 1800, 9350, 180));
+  items.push(P ? makeItem('armchair', 5500, 9600, 90) : makeItem('armchair', 1800, 9350, 180));
   if (!P) items.push(makeItem('rug', 1800, 7500, 90, { w: 2300, d: 1600 }));
   // ---- kitchen & dining (x 6000–11000, y 5100–10000)
   items.push(
@@ -233,6 +233,37 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     makeItem('dining-table', 7700, 8700),
     makeItem('dining-chair', 7700 - 750 - 300, 8700, -90),
   );
+  // ---- front yard: lawn, garden beds and trees, a driveway with an accessible car space, and the
+  // way to the front door (existing: gravel path and a step; proposed: pavers and a ramp)
+  const yard = 10110; // outside face of the front wall
+  const doorX = 4100; // the front door (offset W + h − 4100 along the front wall, measured from its east end)
+  const sf = (surface: 'lawn' | 'pavers' | 'concrete' | 'gravel', x0: number, y0: number, x1: number, y1: number) =>
+    makeItem('surface', (x0 + x1) / 2, (y0 + y1) / 2, 0, { surface, label: surface[0].toUpperCase() + surface.slice(1), w: x1 - x0, d: y1 - y0 });
+  items.push(
+    sf('lawn', -1500, yard, 8900, 17500),
+    sf('concrete', 8900, yard, 12900, 18100),
+    makeItem('car-space', 10900, 15300),
+    makeItem('car', 10300, 15300),
+    makeItem('garden-bed', 1700, yard + 350, 0, { w: 2800 }),
+    makeItem('garden-bed', 7000, yard + 2100, 0, { w: 2400 }),
+    makeItem('tree', 1200, 15600),
+    makeItem('tree', 4600, 16600),
+    makeItem('fence', 3700, 17500, 0, { w: 10400 }),
+  );
+  if (P) {
+    // ramp along the front of the house: a landing at the door, sloping down to the east
+    const rise = 150, gradient = 14, landing = 1500, len = rise * gradient + landing;
+    items.push(
+      makeItem('ramp', doorX - 750 + len / 2, yard + 750, -90, { w: 1500, d: len, h: rise, ramp: { rise, gradient, landing, rails: 'right' } }),
+      sf('pavers', doorX - 750 + len, yard, 8900, yard + 1500),
+    );
+  } else {
+    items.push(
+      makeItem('step', doorX, yard + 150, 0, { w: 1200, d: 300, h: 150 }),
+      sf('gravel', doorX - 500, yard + 300, 8900, yard + 1300),
+    );
+  }
+
   const house = base(P ? 'Low-set house – proposed' : 'Low-set house – existing', {
     walls: [...outer, hallN, hallS, bed1E, bathE],
     openings,
@@ -241,7 +272,9 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     wallColor: '#efebe4',
     labels: ([['Bedroom 1', 1700, 3550], ['Bathroom', 5500, 3550], ['Bedroom 2', 9000, 3200], ['Hallway', 7300, 4550], ['Living', 1500, 5800], ['Kitchen & dining', 8000, 5750]] as const)
       .map(([text, x, y]) => ({ id: uid('label'), text, x, y })),
-    start: { x: 3700, y: 8700, heading: 180 },
+    ground: -150,
+    // getting out of the car in the car space's shared zone
+    start: { x: 12300, y: 12900, heading: 135 },
     end: { x: 8300, y: 6800 },
     targetItemId: bed.id,
   });

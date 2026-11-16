@@ -34,6 +34,9 @@ export const rotate = (v: Vec2, degrees: number): Vec2 => {
 };
 
 /** Item local -> plan. Local x = width, local y = depth, +y = the item's front. */
+/** A plan point in an item's own coordinates (inverse of itemToPlan). */
+export const itemToLocal = (it: Pick<Item, 'x' | 'y' | 'rotation'>, p: Vec2): Vec2 => rotate({ x: p.x - it.x, y: p.y - it.y }, -it.rotation);
+
 export const itemToPlan = (it: Pick<Item, 'x' | 'y' | 'rotation'>, local: Vec2): Vec2 =>
   add({ x: it.x, y: it.y }, rotate(local, it.rotation));
 

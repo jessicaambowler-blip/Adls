@@ -3,7 +3,7 @@ import type { ItemKind } from './types';
 export interface CatalogueEntry {
   kind: ItemKind;
   label: string;
-  group: 'Bedroom' | 'Bathroom' | 'Living & kitchen' | 'Equipment' | 'Planning aids';
+  group: 'Bedroom' | 'Bathroom' | 'Living & kitchen' | 'Equipment' | 'Planning aids' | 'Outdoor';
   w: number;
   d: number;
   h: number;
@@ -37,7 +37,14 @@ export const CATALOGUE: CatalogueEntry[] = [
   { kind: 'grab-rail', label: 'Grab rail', group: 'Bathroom', w: 900, d: 80, h: 40, elevation: 800, blocks: false, wallMounted: true, description: 'Stainless grab rail, centre height about 800 mm.' },
   { kind: 'grab-rail-l', label: 'L-shaped grab rail', group: 'Bathroom', w: 700, d: 80, h: 700, elevation: 800, blocks: false, wallMounted: true, description: 'L-shaped rail: horizontal leg at about 800 mm with a vertical leg rising from one end.' },
   { kind: 'ramp', label: 'Ramp', group: 'Equipment', w: 1000, d: 2000, h: 140, blocks: false, description: 'Ramp with a level landing at the top. Set the rise and gradient; the length follows.' },
-  { kind: 'step', label: 'Step / threshold', group: 'Equipment', w: 900, d: 300, h: 150, blocks: true, description: 'A step or raised threshold. Set its height.' },
+  { kind: 'surface', label: 'Ground surface', group: 'Outdoor', w: 3000, d: 2000, h: 20, blocks: false, description: 'Lawn, pavers, concrete, gravel or decking.' },
+  { kind: 'fence', label: 'Fence', group: 'Outdoor', w: 3000, d: 60, h: 1200, blocks: true, description: 'Paling fence.' },
+  { kind: 'gate', label: 'Gate', group: 'Outdoor', w: 1000, d: 60, h: 1200, blocks: false, description: 'Garden gate (shown open). Its width is the clear opening.' },
+  { kind: 'garden-bed', label: 'Garden bed', group: 'Outdoor', w: 2000, d: 600, h: 300, blocks: true, description: 'Raised garden bed.' },
+  { kind: 'tree', label: 'Tree', group: 'Outdoor', w: 600, d: 600, h: 4500, blocks: true, description: 'Tree (the trunk blocks the way).' },
+  { kind: 'car', label: 'Car', group: 'Outdoor', w: 1850, d: 4600, h: 1500, blocks: true, description: 'Hatchback / small SUV.' },
+  { kind: 'car-space', label: 'Car space', group: 'Outdoor', w: 3800, d: 5400, h: 5, blocks: false, description: 'Accessible car space with room to get out beside the car.' },
+  { kind: 'step', label: 'Step / threshold', group: 'Equipment', w: 900, d: 300, h: 150, blocks: false, description: 'A step or raised threshold. Set its height.' },
   { kind: 'bath', label: 'Bath', group: 'Bathroom', w: 1675, d: 760, h: 550, blocks: true, wallMounted: true, description: 'Standard built-in bath.' },
   { kind: 'mobile-hoist', label: 'Mobile hoist', group: 'Equipment', w: 650, d: 1250, h: 1450, blocks: true, description: 'Mobile patient hoist with sling bar.' },
   { kind: 'kitchen-bench', label: 'Kitchen bench', group: 'Living & kitchen', w: 2400, d: 600, h: 900, blocks: true, wallMounted: true, description: 'Kitchen bench run with cupboards and sink.' },

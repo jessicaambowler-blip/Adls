@@ -49,6 +49,13 @@ export type ItemKind =
   | 'grab-rail'
   | 'grab-rail-l'
   | 'ramp'
+  | 'surface'
+  | 'fence'
+  | 'gate'
+  | 'garden-bed'
+  | 'tree'
+  | 'car'
+  | 'car-space'
   | 'step'
   | 'bath'
   | 'mobile-hoist'
@@ -79,8 +86,12 @@ export interface Item {
   /** shown on the plan only (the 3D model comes from an original VisADLs recording) */
   hidden3d?: boolean;
   /** ramps: rise (mm), gradient 1:N, top landing length (mm), handrails */
+  /** outdoor ground surfaces */
+  surface?: SurfaceKind;
   ramp?: { rise: number; gradient: number; landing: number; rails: 'both' | 'left' | 'right' | 'none' };
 }
+
+export type SurfaceKind = 'lawn' | 'pavers' | 'concrete' | 'gravel' | 'decking';
 
 export type FloorFinish = 'timber' | 'tiles' | 'vinyl' | 'carpet';
 
@@ -103,6 +114,8 @@ export interface PlanLabel { id: string; text: string; x: number; y: number }
 export interface Layout {
   name: string;
   walls: Wall[];
+  /** height of the ground outside relative to the floor inside (mm, e.g. -150) */
+  ground?: number;
   /** room names and other notes written on the plan */
   labels?: PlanLabel[];
   openings: Opening[];

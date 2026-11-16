@@ -171,3 +171,38 @@ export const leafTexture = () =>
       ctx.fill();
     }
   });
+
+/** Outdoor surfaces – each texture covers 1 m × 1 m. */
+export const outdoorTexture = (kind: 'lawn' | 'pavers' | 'concrete' | 'gravel' | 'decking') =>
+  make(`out:${kind}`, 512, (ctx, s) => {
+    const r = rand(kind.length * 31 + 5);
+    const fill = (c: string) => { ctx.fillStyle = c; ctx.fillRect(0, 0, s, s); };
+    if (kind === 'lawn') {
+      fill('#7aa055');
+      for (let i = 0; i < 9000; i++) { const g = 120 + r() * 70; ctx.fillStyle = `rgba(${60 + r() * 40},${g},${40 + r() * 30},0.5)`; ctx.fillRect(r() * s, r() * s, 1.5, 3 + r() * 4); }
+    } else if (kind === 'pavers') {
+      fill('#bcae98');
+      const n = 2; const t = s / (n * 2); // 250 mm pavers
+      for (let y = 0; y < n * 2; y++) for (let x = 0; x < n * 2; x++) {
+        const v = 190 + r() * 30;
+        ctx.fillStyle = `rgb(${v},${v - 14},${v - 32})`;
+        ctx.fillRect(x * t + 3, y * t + 3, t - 6, t - 6);
+      }
+      noise(ctx, s, 14, r);
+    } else if (kind === 'concrete') {
+      fill('#cdc8bf'); noise(ctx, s, 18, r);
+      ctx.strokeStyle = 'rgba(120,115,108,0.5)'; ctx.lineWidth = 3; ctx.strokeRect(0, 0, s, s);
+    } else if (kind === 'gravel') {
+      fill('#a99f90');
+      for (let i = 0; i < 7000; i++) { const v = 130 + r() * 110; ctx.fillStyle = `rgb(${v},${v - 6},${v - 16})`; ctx.beginPath(); ctx.arc(r() * s, r() * s, 1 + r() * 3, 0, Math.PI * 2); ctx.fill(); }
+    } else {
+      fill('#8f6a45');
+      const n = 7;
+      for (let i = 0; i < n; i++) {
+        const v = 135 + r() * 30;
+        ctx.fillStyle = `rgb(${v + 20},${v - 15},${v - 55})`;
+        ctx.fillRect(0, (i * s) / n + 2, s, s / n - 4);
+      }
+      noise(ctx, s, 12, r);
+    }
+  });

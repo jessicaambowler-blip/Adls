@@ -1,5 +1,6 @@
 import { CHAIRS, chairOf } from '../model/catalogue';
-import { add, clearOpening, dist, headingOf, itemToPlan, rotate, wallPoint } from '../model/geometry';
+import { add, clearOpening, dist, headingOf, itemToLocal, itemToPlan, rotate, wallPoint } from '../model/geometry';
+import { surfaceInfo } from '../model/ground';
 import { chairFootprint, obstaclesOf, planRoute, sampleAt, type RouteResult } from '../model/pathfinding';
 import { fitPoint, fitToBed, fitWeight, getOriginal, sampleTrack, toPlan, ueYaw, type BedFit, type OriginalSceneData } from '../originals/originals';
 import { polygonsOverlap } from '../model/geometry';
@@ -66,6 +67,10 @@ export interface BuiltActivity {
   mh?: { person: (t: number) => Mix; carer?: (t: number) => Mix; hoist?: (t: number) => Mix; mirrored?: boolean; recorded?: boolean };
   /** things that move during the activity (cupboard doors) */
   props?: ActivityProp[];
+  /** steps the route goes over */
+  steps?: string[];
+  /** rough ground surfaces the route crosses */
+  rough?: string[];
   /** where the chair is too wide for the space (e.g. a doorway) – shown, but it still carries on */
   narrow?: { at: Vec2; t: number; where: string };
 }
@@ -171,7 +176,16 @@ const findTarget = (layout: Layout, kinds: string[]): Item | undefined => {
 export const buildActivity = (layout: Layout, settings: ActivitySettings, importedDuration = 0): BuiltActivity => {
   const b = buildActivityInner(layout, settings, importedDuration);
   const n = b.route?.narrow;
-  return n ? { ...b, narrow: { ...n, where: describeStop(layout, n.at) } } : b;
+  const out = n ? { ...b, narrow: { ...n, where: describeStop(layout, n.at) } } : b;
+  // rough ground the route crosses (hard going in a wheelchair)
+  const rough = new Set<string>();
+  for (const it of layout.items) {
+    if (it.kind !== 'surface' || !surfaceInfo(it.surface).rough) continue;
+    if (b.route?.samples.some((s, i) => i % 3 === 0 && Math.abs(itemToLocal(it, s).x) < it.w / 2 && Math.abs(itemToLocal(it, s).y) < it.d / 2)) rough.add(surfaceInfo(it.surface).label.toLowerCase());
+  }
+  // steps the route goes over (a wheelchair can't)
+  const steps = layout.items.filter((it) => it.kind === 'step' && it.h >= 15 && b.route?.samples.some((s) => Math.abs(itemToLocal(it, s).x) < it.w / 2 && Math.abs(itemToLocal(it, s).y) < it.d / 2)).map((it) => `${it.h} mm step`);
+  return { ...out, ...(rough.size ? { rough: [...rough] } : {}), ...(steps.length ? { steps } : {}) };
 };
 
 const buildActivityInner = (layout: Layout, settings: ActivitySettings, importedDuration = 0): BuiltActivity => {

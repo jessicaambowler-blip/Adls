@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActivity } from '../activities/useActivity';
+import { surfaceInfo } from '../model/ground';
+import { makeItem } from '../model/templates';
 import { useClearances } from '../activities/useClearances';
 import { CHAIRS, chairOf, catalogueEntry, itemBlocks, itemLabel } from '../model/catalogue';
 import {
@@ -89,6 +91,17 @@ const ItemSymbol = ({ it, fs }: { it: Item; fs: number }) => {
     );
   } else if (k === 'grab-rail') {
     return <rect x={-hw} y={-hd} width={it.w} height={it.d} rx={it.d / 2} className="rail" />;
+  } else if (k === 'surface') {
+    const info = surfaceInfo(it.surface);
+    return <rect x={-hw} y={-hd} width={it.w} height={it.d} className={`surface surf-${info.id}`} style={{ fill: info.colour }} />;
+  } else if (k === 'car-space') {
+    return <g><rect x={-hw} y={-hd} width={it.w} height={it.d} className="carspace" /><rect x={hw - 1200} y={-hd} width={1200} height={it.d} className="carspace-zone" /></g>;
+  } else if (k === 'tree') {
+    return <g><circle r={Math.max(hw, 900)} className="tree-canopy" /><circle r={hw / 2} className="tree-trunk" /></g>;
+  } else if (k === 'fence') {
+    return <rect x={-hw} y={-hd} width={it.w} height={it.d} className="fence-sym" />;
+  } else if (k === 'gate') {
+    return <g><line x1={-hw} y1={0} x2={hw} y2={0} className="door-leaf" /><path d={`M ${-hw} 0 L ${-hw + it.w * 0.3} ${it.w * 0.95}`} className="door-leaf" /></g>;
   } else if (k === 'grab-rail-l') {
     return <g><rect x={-hw} y={-hd} width={it.w} height={it.d} rx={it.d / 2} className="rail" /><circle cx={hw - 40} cy={0} r={70} className="rail" /></g>;
   } else if (k === 'ramp') {
@@ -165,6 +178,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const [calib, setCalib] = useState<Vec2[]>([]);
   const [area, setArea] = useState<{ a: Vec2; b: Vec2 } | null>(null);
   const [room, setRoom] = useState<{ a: Vec2; b: Vec2 } | null>(null);
+  const [surf, setSurf] = useState<{ a: Vec2; b: Vec2 } | null>(null);
   const [typed, setTyped] = useState('');
   // the key handler reads these (state from its last render can be out of date between fast key presses)
   const live = useRef({ draw: [] as Vec2[], typed: '', cursor: null as Vec2 | null, thick: [] as number[], cursorThick: 0 });
@@ -290,6 +304,9 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       return;
     }
     if (tool === 'place') {
+      // ground surfaces are drawn by dragging out their area; everything else is a click
+      const pl = useStore.getState().placing;
+      if (pl?.what === 'item' && pl.kind === 'surface') { const q = { x: snap(p.x), y: snap(p.y) }; setSurf({ a: q, b: q }); return; }
       placeAt(layoutKey, p);
       return;
     }
@@ -396,6 +413,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     }
     if (area) { setArea({ ...area, b: p }); return; }
     if (room) { setRoom({ ...room, b: snapDrawPt(p).p }); return; }
+    if (surf) { setSurf({ ...surf, b: { x: snap(p.x), y: snap(p.y) } }); return; }
     if (tool === 'draw-wall' || tool === 'add-room') {
       const L = live.current.draw;
       const sn = snapDrawPt(p, L[L.length - 1]);
@@ -477,6 +495,19 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       const big = Math.abs(area.a.x - area.b.x) > 1500 && Math.abs(area.a.y - area.b.y) > 1500;
       if (big) runDetection(layoutKey, area.a, area.b);
       setArea(null);
+    }
+    if (surf) {
+      const r = surf;
+      setSurf(null);
+      const w = Math.abs(r.a.x - r.b.x), d = Math.abs(r.a.y - r.b.y);
+      if (w > 300 && d > 300) {
+        const pl = useStore.getState().placing;
+        if (pl?.what === 'item') {
+          const it = makeItem('surface', Math.round((r.a.x + r.b.x) / 2), Math.round((r.a.y + r.b.y) / 2), 0, { ...pl.over, w: Math.round(w), d: Math.round(d) });
+          updateLayout((l) => { l.items.push(it); }, { key: layoutKey });
+          set({ tool: 'select', placing: undefined, selection: { type: 'item', id: it.id } });
+        }
+      } else placeAt(layoutKey, r.a);
     }
     if (room) {
       const r = room;
@@ -656,8 +687,8 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         {route && <polyline points={pts(route.samples.filter((_, i) => i % 4 === 0))} className="route" pointerEvents="none" />}
         {built.parking && <polygon points={pts(chairFootprint(built.parking, C.width, C.length))} className="parking" pointerEvents="none" />}
 
-        {/* items */}
-        {layout.items.map((it) => {
+        {/* items (ground surfaces underneath everything else) */}
+        {[...layout.items].sort((a, b) => Number(b.kind === 'surface' || b.kind === 'car-space') - Number(a.kind === 'surface' || a.kind === 'car-space')).map((it) => {
           const sel = selection?.type === 'item' && selection.id === it.id;
           return (
             <g
@@ -677,7 +708,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         })}
         {layout.items.map((it) => {
           const sel = selection?.type === 'item' && selection.id === it.id;
-          if (it.kind === 'turning-space' || it.kind === 'grab-rail' || it.kind === 'grab-rail-l' || (it.kind === 'ramp' && !sel) || (!labels && !sel)) return null;
+          if (it.kind === 'turning-space' || it.kind === 'grab-rail' || it.kind === 'grab-rail-l' || it.kind === 'fence' || it.kind === 'gate' || ((it.kind === 'ramp' || it.kind === 'car-space') && !sel) || (!labels && !sel)) return null;
           // names only where they fit inside the item (the selected item always shows its name)
           const text = itemLabel(it.kind, it.label);
           const across = Math.abs(Math.cos((it.rotation * Math.PI) / 180)) > 0.5 ? it.w : it.d;
@@ -844,6 +875,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           return <circle cx={cursor.x} cy={cursor.y} r={fs * 0.5} className="snap-pt" pointerEvents="none" />;
         })()}
         {tool === 'add-room' && cursor && !room && <circle cx={cursor.x} cy={cursor.y} r={fs * 0.35} className="snap-pt" pointerEvents="none" />}
+        {surf && <rect x={Math.min(surf.a.x, surf.b.x)} y={Math.min(surf.a.y, surf.b.y)} width={Math.abs(surf.a.x - surf.b.x)} height={Math.abs(surf.a.y - surf.b.y)} className="room-preview" pointerEvents="none" />}
         {room && (
           <g pointerEvents="none">
             <rect x={Math.min(room.a.x, room.b.x)} y={Math.min(room.a.y, room.b.y)} width={Math.abs(room.a.x - room.b.x)} height={Math.abs(room.a.y - room.b.y)} className="room-preview" />

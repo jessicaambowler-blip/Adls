@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Item } from '../model/types';
 import { M, boxOn, cyl, fabric, lathe, mesh, paint, rbox, rod, std, tube } from './build';
-import { leafTexture, rugTexture } from './textures';
+import { leafTexture, outdoorTexture, rugTexture } from './textures';
 
 // Procedural furniture & fixtures. Each builder returns a group whose origin is the centre of the
 // item's footprint on the floor, front facing +z, sized from the item's mm dimensions.
@@ -423,6 +423,86 @@ const ramp: Builder = (w, d, h, it) => {
 
 const step: Builder = (w, d, h) => G(boxOn(w, h, d, concrete(), 0, 0, 0, 0.004));
 
+const surface: Builder = (w, d, _h, it) => {
+  const kind = it.surface ?? 'lawn';
+  const tex = outdoorTexture(kind).clone();
+  tex.needsUpdate = true;
+  tex.repeat.set(w, d);
+  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: kind === 'concrete' || kind === 'pavers' ? 0.85 : 1 });
+  const g = G(mesh(new THREE.BoxGeometry(w, 0.02, d), m, [0, 0.01 + (kind === 'lawn' ? 0 : 0.003), 0]));
+  g.traverse((o) => { o.castShadow = false; });
+  return g;
+};
+
+const fence: Builder = (w, d, h) => {
+  const timber = paint('#b08a62', 0.9);
+  const g = new THREE.Group();
+  const posts = Math.max(2, Math.round(w / 2.4) + 1);
+  for (let i = 0; i < posts; i++) g.add(boxOn(0.09, h + 0.05, 0.09, timber, -w / 2 + 0.045 + ((w - 0.09) * i) / (posts - 1), 0, 0));
+  for (const y of [0.2, h - 0.25]) g.add(boxOn(w, 0.07, 0.04, timber, 0, y, -0.03));
+  const n = Math.floor(w / 0.11);
+  for (let i = 0; i < n; i++) g.add(boxOn(0.1, h - 0.06, 0.015, paint(i % 3 ? '#b99670' : '#a8835d', 0.95), -w / 2 + 0.06 + i * 0.11, 0.04, 0.012));
+  void d;
+  return g;
+};
+
+const gate: Builder = (w, _d, h) => {
+  const timber = paint('#a5805a', 0.9);
+  const g = new THREE.Group();
+  for (const sx of [-1, 1]) g.add(boxOn(0.1, h + 0.1, 0.1, timber, sx * (w / 2 + 0.05), 0, 0));
+  const leaf = new THREE.Group();
+  leaf.add(boxOn(w - 0.04, 0.06, 0.035, timber, w / 2, 0.15, 0), boxOn(w - 0.04, 0.06, 0.035, timber, w / 2, h - 0.2, 0));
+  for (let i = 0; i < Math.floor(w / 0.12); i++) leaf.add(boxOn(0.09, h - 0.15, 0.015, timber, 0.07 + i * 0.12, 0.08, 0.02));
+  leaf.position.x = -w / 2;
+  leaf.rotation.y = -1.25; // shown open
+  g.add(leaf);
+  return g;
+};
+
+const gardenBed: Builder = (w, d, h) => {
+  const g = G(boxOn(w, h, d, paint('#7a5a3f', 0.9), 0, 0, 0, 0.01), boxOn(w - 0.08, 0.02, d - 0.08, paint('#4b3a2c', 1), 0, h - 0.015, 0, 0));
+  const leaf = paint('#4f7d3a', 0.9), bloom = paint('#d97aa0', 0.8);
+  const n = Math.max(2, Math.round(w / 0.45));
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + (w * (i + 0.5)) / n;
+    g.add(mesh(new THREE.SphereGeometry(0.16, 14, 10), leaf, [x, h + 0.12, (i % 2 ? 0.08 : -0.08) * d]));
+    if (i % 2 === 0) g.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), bloom, [x + 0.05, h + 0.27, 0]));
+  }
+  return g;
+};
+
+const tree: Builder = (_w, _d, h) => {
+  const g = G(mesh(cyl(0.11, 0.16, h * 0.45, 12), paint('#6d5240', 0.95), [0, h * 0.225, 0]));
+  const leaf = new THREE.MeshStandardMaterial({ color: '#5b8a3f', roughness: 0.9 });
+  for (const [x, y, z, r] of [[0, 0.62, 0, 0.3], [0.18, 0.55, 0.1, 0.22], [-0.16, 0.57, -0.08, 0.22], [0.05, 0.75, -0.12, 0.2]]) g.add(mesh(new THREE.SphereGeometry(h * r, 18, 14), leaf, [x * h, y * h, z * h]));
+  return g;
+};
+
+const car: Builder = (w, d, h) => {
+  const body = new THREE.MeshPhysicalMaterial({ color: '#6c8aa8', roughness: 0.35, metalness: 0.4, clearcoat: 0.8 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#28323c', roughness: 0.1, metalness: 0.3 });
+  const g = G(
+    mesh(rbox(w, h * 0.42, d, 0.12, 4), body, [0, 0.2 + h * 0.21, 0]),
+    mesh(rbox(w * 0.86, h * 0.38, d * 0.55, 0.12, 4), glass, [0, 0.2 + h * 0.42 + h * 0.17, -d * 0.04]),
+    mesh(rbox(w * 0.84, 0.04, d * 0.5, 0.02, 2), body, [0, 0.2 + h * 0.79, -d * 0.04]),
+  );
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(cyl(0.32, 0.32, 0.22, 24), M.rubber, [sx * (w / 2 - 0.13), 0.32, sz * (d / 2 - 0.75)], [0, 0, Math.PI / 2]));
+  return g;
+};
+
+const carSpace: Builder = (w, d) => {
+  const line = paint('#f2f2ee', 0.6);
+  const g = new THREE.Group();
+  for (const sx of [-1, 1]) g.add(boxOn(0.08, 0.006, d, line, sx * (w / 2 - 0.04), 0.004, 0, 0));
+  // shared zone stripes on the passenger side (to get out beside the car)
+  for (let i = 0; i < Math.floor(d / 0.6); i++) {
+    const s = boxOn(0.06, 0.006, 1.3, paint('#f5d33c', 0.6), w / 2 - 0.6, 0.004, -d / 2 + 0.4 + i * 0.6, 0);
+    s.rotation.y = 0.7;
+    g.add(s);
+  }
+  return g;
+};
+
 const hallTable: Builder = (w, d, h) => {
   const g = G(boxOn(w, 0.03, d, M.walnut, 0, h - 0.03, 0, 0.005));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(cyl(0.015, 0.012, h - 0.03), M.blackMetal, [sx * (w / 2 - 0.04), (h - 0.03) / 2, sz * (d / 2 - 0.04)]));
@@ -467,7 +547,7 @@ const turningSpace: Builder = (w) => {
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
   'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
-  toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, bath,
+  toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,
 };

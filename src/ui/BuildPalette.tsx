@@ -41,6 +41,17 @@ const GROUPS: { name: string; entries: Entry[] }[] = [
     ],
   },
   {
+    name: 'Outdoor', entries: [
+      it('surface', '🟩', 'Lawn', 'Lawn – drag out the area on the plan', { surface: 'lawn', label: 'Lawn', w: 3000, d: 2000 }),
+      it('surface', '▦', 'Pavers', 'Pavers – drag out the area on the plan', { surface: 'pavers', label: 'Pavers', w: 1200, d: 3000 }),
+      it('surface', '⬜', 'Concrete', 'Concrete – drag out the area on the plan', { surface: 'concrete', label: 'Concrete', w: 3000, d: 6000 }),
+      it('surface', '⁘', 'Gravel', 'Gravel – drag out the area on the plan', { surface: 'gravel', label: 'Gravel', w: 1200, d: 3000 }),
+      it('surface', '☰', 'Decking', 'Decking – drag out the area on the plan', { surface: 'decking', label: 'Decking', w: 3000, d: 2400 }),
+      it('fence', '┼', 'Fence'), it('gate', '⌐', 'Gate'), it('garden-bed', '✿', 'Garden'), it('tree', '🌳', 'Tree'),
+      it('car', '🚗', 'Car'), it('car-space', '🅿', 'Car space'),
+    ],
+  },
+  {
     name: 'Furniture', entries: [
       it('bed-adjustable', '🛏', 'Care bed'), it('bed-single', '▭', 'Single bed'), it('bed-queen', '▢', 'Queen bed'), it('bedside-table', '▫', 'Bedside'),
       it('wardrobe', '▤', 'Wardrobe'), it('armchair', '🪑', 'Armchair'), it('sofa', '🛋', 'Sofa'), it('dining-table', '▭', 'Table'),
@@ -56,7 +67,7 @@ export const BuildPalette = () => {
   const viewMode = useStore((s) => s.viewMode);
   const gridMm = useStore((s) => s.gridMm);
   const grid3d = useStore((s) => s.grid3d);
-  const [open, setOpen] = useState<Record<string, boolean>>({ Building: true, Bathroom: true, Rails: true, Structures: true, Furniture: false });
+  const [open, setOpen] = useState<Record<string, boolean>>({ Building: true, Bathroom: true, Rails: true, Structures: true, Outdoor: false, Furniture: false });
   const [dialog, setDialog] = useState<'ramp' | 'templates' | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
