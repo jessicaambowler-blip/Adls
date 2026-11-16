@@ -10,7 +10,7 @@ import type { BuiltActivity } from '../activities/activities';
 import { useActivity } from '../activities/useActivity';
 import { itemToPlan, layoutBounds, rotate, wallLength, wallNormal } from '../model/geometry';
 import { chairFootprint } from '../model/pathfinding';
-import { CHAIRS } from '../model/catalogue';
+import { CHAIRS, chairOf } from '../model/catalogue';
 import { useStore } from '../model/store';
 import type { ActivitySettings, Item, Layout, LayoutKey } from '../model/types';
 import { ASSETS } from './assets';
@@ -21,6 +21,7 @@ import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
 import { PersonaActors } from './PersonaActors';
 import { placeAt } from '../ui/placeFlow';
+import { useClearances } from '../activities/useClearances';
 import { getOriginal, originalMissing } from '../originals/originals';
 import { P2_ID } from '../activities/activities';
 
@@ -138,6 +139,31 @@ const Floor = ({ layout }: { layout: Layout }) => {
 };
 
 // ---------------------------------------------------------------- building aids
+
+/** Turning circles on the floor (quiet dashed rings) and markers on doorways too narrow for the chair. */
+const ClearanceRings = ({ layoutKey }: { layoutKey: LayoutKey }) => {
+  const checks = useClearances(layoutKey);
+  const on = useStore((s) => s.project.activity.showClearances !== false);
+  if (!on) return null;
+  const col = { ok: '#2e7d32', tight: '#b26a00', no: '#c62828' } as const;
+  return (
+    <group>
+      {checks.map((c, i) => {
+        if (c.kind === 'turn') {
+          const pts = Array.from({ length: 65 }, (_, k) => { const a = (k / 64) * Math.PI * 2; return [c.at.x / 1000 + Math.cos(a) * c.need / 2000, 0.014, c.at.y / 1000 + Math.sin(a) * c.need / 2000] as [number, number, number]; });
+          return <Line key={i} points={pts} color={col[c.status]} lineWidth={c.status === 'ok' ? 1.5 : 2.5} dashed dashSize={0.1} gapSize={0.07} transparent opacity={c.status === 'ok' ? 0.5 : 0.9} />;
+        }
+        if (c.status === 'ok') return null;
+        return (
+          <mesh key={i} position={[c.at.x / 1000, 2.15, c.at.y / 1000]}>
+            <sphereGeometry args={[0.06, 16, 12]} />
+            <meshBasicMaterial color={col[c.status]} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+};
 
 /** Measuring grid on the floor: fine lines every 100 mm, strong blue lines every metre. */
 const FloorGrid = ({ layout }: { layout: Layout }) => {
@@ -336,6 +362,7 @@ const Actors = ({ built, settings, live }: { built: BuiltActivity; settings: Act
     const c = built.chair(t);
     chair.root.position.set(c.x / 1000, 0, c.y / 1000);
     chair.root.rotation.y = THREE.MathUtils.degToRad(-c.heading);
+    { const sp = chairOf(settings), base = CHAIRS[settings.chair]; chair.root.scale.set(sp.width / base.width, 1, sp.length / base.length); }
     for (const w of chair.wheels) w.obj.rotation.x = c.wheelTurn / 1000 / w.radius;
     const place = (rig: AvatarRig, s: ReturnType<BuiltActivity['person']>) => {
       rig.root.position.set(s.x / 1000, s.z / 1000, s.y / 1000);
@@ -419,7 +446,7 @@ const RouteOverlay = ({ built, settings }: { built: BuiltActivity; settings: Act
   // a contact's tag shows only around the moment the chair gets there (re-renders only when that changes)
   const nearKey = useStore((s) => (route?.contacts ?? []).map((c, i) => (Math.abs(s.time - c.t) < 2.5 ? i : -1)).filter((i) => i >= 0).join(','));
   const near = nearKey ? nearKey.split(',').map(Number) : [];
-  const C = CHAIRS[settings.chair];
+  const C = chairOf(settings);
   const line = useMemo(() => (route ? route.samples.filter((_, i) => i % 3 === 0).map((s) => [s.x / 1000, 0.015, s.y / 1000] as [number, number, number]) : []), [route]);
   const prints = useMemo(() => {
     if (!route || !settings.showSweptPath) return [];
@@ -690,6 +717,7 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         <Items layout={layout} settings={settings} layoutKey={layoutKey} />
       </group>
       <FloorGrid layout={layout} />
+      <ClearanceRings layoutKey={layoutKey} />
       <SelectionDims layout={layout} />
       {settings.type === 'original' && <OriginalActors built={built} live={live as never} />}
       {settings.type !== 'imported' && settings.type !== 'original' && (built.mh

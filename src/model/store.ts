@@ -76,7 +76,7 @@ interface State extends UiState {
   updateLayout: (fn: (l: Layout) => void, opts?: { commit?: boolean; key?: LayoutKey }) => void;
   replaceLayout: (l: Layout, key?: LayoutKey) => void;
   updateActivity: (p: Partial<ActivitySettings>) => void;
-  updateProject: (p: Partial<Pick<Project, 'title' | 'consumerName' | 'otName'>>) => void;
+  updateProject: (p: Partial<Pick<Project, 'title' | 'consumerName' | 'otName' | 'report'>>) => void;
   addNote: (n: Note) => void;
   updateNote: (id: string, p: Partial<Note>) => void;
   removeNote: (id: string) => void;

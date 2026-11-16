@@ -1,6 +1,8 @@
 import { ACTIVITY_INFO, P2_ID, type BuiltActivity } from '../activities/activities';
 import { useActivity } from '../activities/useActivity';
-import { CHAIRS, itemLabel } from '../model/catalogue';
+import { useClearances } from '../activities/useClearances';
+import { DOOR_MARGIN, type Check } from '../model/clearance';
+import { CHAIRS, CHAIR_PRESETS, chairOf, itemLabel } from '../model/catalogue';
 import { useStore } from '../model/store';
 import type { ActivityType, LayoutKey, PersonaSettings } from '../model/types';
 import { NumberField, Section, Segmented, Toggle } from './controls';
@@ -14,12 +16,12 @@ const TOPS = ['#3d6e8f', '#8f3d4c', '#4d7a52', '#d9a43f', '#5a5a66', '#e9e6df'];
 const BOTTOMS = ['#2f3440', '#46505e', '#5a4636', '#24262a', '#6b7b8c'];
 
 export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layoutKey: LayoutKey }) => {
-  const chair = useStore((s) => s.project.activity.chair);
+  const act = useStore((s) => s.project.activity);
   const unverified = useStore((s) => s.project.layouts[layoutKey].unverified);
   const r = built.route;
   if (built.problem && (!r || !built.target)) return <div className="result warn">{built.problem}</div>;
   if (!r) return null;
-  const C = CHAIRS[chair];
+  const C = chairOf(act);
   const name = layoutKey === 'existing' ? 'Existing' : 'Proposed';
   const contacts = [...new Set(r.contacts.map((c) => c.with))];
   return (
@@ -32,6 +34,59 @@ export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layou
       {built.problem && <div className="problem">{built.problem}</div>}
       {unverified && <div className="problem">Measurements not yet checked.</div>}
     </div>
+  );
+};
+
+/** The client's wheelchair: start from a typical chair, then type in their chair's sizes. */
+const ChairEditor = ({ p2 }: { p2: boolean }) => {
+  const s = useStore((st) => st.project.activity);
+  const update = useStore((st) => st.updateActivity);
+  const C = chairOf(s);
+  const preset = s.chairSpec?.preset ?? s.chair;
+  const presets = CHAIR_PRESETS.filter((x) => !(p2 && x.model === 'manual'));
+  const choose = (id: string) => {
+    const pr = CHAIR_PRESETS.find((x) => x.id === id)!;
+    update({ chair: pr.model, chairSpec: { preset: pr.id, width: pr.width, length: pr.length, turn: pr.turn } });
+  };
+  const edit = (k: 'width' | 'length' | 'turn', v: number) => update({ chairSpec: { preset: 'custom', width: C.width, length: C.length, turn: C.turn, [k]: v } });
+  return (
+    <>
+      <div className="row-label">Wheelchair</div>
+      <Segmented label="Wheelchair" value={preset === 'custom' ? '' : preset} onChange={choose} options={presets.map((x) => ({ value: x.id, label: x.label }))} />
+      <div className="grid3">
+        <NumberField label="Width" value={C.width} onChange={(v) => edit('width', v)} step={10} min={450} max={1000} />
+        <NumberField label="Length" value={C.length} onChange={(v) => edit('length', v)} step={10} min={700} max={1600} />
+        <NumberField label="Turning ⌀" value={C.turn} onChange={(v) => edit('turn', v)} step={50} min={1000} max={2600} />
+      </div>
+      {preset === 'custom' && <p className="hint">Using the client’s chair sizes.</p>}
+    </>
+  );
+};
+
+/** Turning space in each room and doorway widths, for the layout(s) on screen. */
+const ClearanceList = () => {
+  const compare = useStore((st) => st.compare);
+  const active = useStore((st) => st.activeLayout);
+  const ex = useClearances('existing'), pr = useClearances('proposed');
+  const C = chairOf(useStore((st) => st.project.activity));
+  const mark = (st: string) => (st === 'ok' ? '✓' : st === 'tight' ? '!' : '✗');
+  const val = (c?: Check) => (!c ? '–' : c.kind === 'turn' ? `⌀${c.max}` : `${c.clear}`);
+  const name = (c: Check) => (c.kind === 'turn' ? `${c.room} turning` : c.name);
+  const cell = (c?: Check) => <span className={`st ${c?.status ?? ''}`}>{val(c)} {c ? mark(c.status) : ''}</span>;
+  const base = compare ? ex : active === 'existing' ? ex : pr;
+  return (
+    <>
+      <p className="hint">Chair {C.width} × {C.length} mm: turns in ⌀{C.turn}, doors need ≈{C.width + DOOR_MARGIN} mm clear.</p>
+      <ul className="clear-list">
+        {compare && <li className="head"><span /><span><span>Existing</span><span>Proposed</span></span></li>}
+        {base.map((c, i) => (
+          <li key={i}>
+            <span>{name(c)}</span>
+            {compare ? <span>{cell(c)}{cell(pr.find((x) => name(x) === name(c)))}</span> : cell(c)}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 };
 
@@ -136,16 +191,19 @@ export const ActivityPanel = () => {
           <Toggle checked={s.showSweptPath} onChange={(showSweptPath) => update({ showSweptPath })}>Show space used by the wheelchair</Toggle>
         </Section>
       )}
+      {s.type !== 'original' && (
+        <Section title="Clearances">
+          <ClearanceList />
+          <Toggle checked={s.showClearances !== false} onChange={(showClearances) => update({ showClearances })}>Show on plan and 3D</Toggle>
+        </Section>
+      )}
 
       <Section title="Person & equipment">
         <div className="row-label">Who</div>
         <Segmented label="Character" value={s.character ?? 'figure'} onChange={(character) => update(character === 'p2' ? { character, chair: 'power' } : { character })}
           options={[{ value: 'p2', label: 'Persona 2 (VisADLs)' }, { value: 'figure', label: 'Simple figure' }]} />
         {s.character === 'p2' && !p2Ready && <p className="hint">Persona 2 isn’t included in this copy.</p>}
-        <div className="row-label">Wheelchair</div>
-        {p2 ? <p className="muted">Powered ({CHAIRS.power.width} × {CHAIRS.power.length} mm)</p> : (
-          <Segmented label="Wheelchair" value={s.chair} onChange={(chair) => update({ chair })} options={[{ value: 'manual', label: 'Manual' }, { value: 'power', label: 'Powered' }]} />
-        )}
+        <ChairEditor p2={p2} />
         <Toggle checked={s.supportPerson} onChange={(supportPerson) => update({ supportPerson })}>Include a support person</Toggle>
         {!p2 && <>
         <label className="text">Name<input value={s.persona.name} onChange={(e) => persona({ name: e.target.value })} /></label>

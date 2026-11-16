@@ -1,3 +1,4 @@
+import { CHAIRS, chairOf } from '../model/catalogue';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
@@ -153,6 +154,7 @@ export const PersonaActors = ({ built, settings, live }: { built: BuiltActivity;
     const c = built.chair(t);
     chair.root.position.set(c.x / 1000, 0, c.y / 1000);
     chair.root.rotation.y = THREE.MathUtils.degToRad(-c.heading);
+    { const sp = chairOf(settings), base = CHAIRS[settings.chair]; chair.root.scale.set(sp.width / base.width, 1, sp.length / base.length); }
     for (const w of chair.wheels) w.obj.rotation.x = c.wheelTurn / 1000 / w.radius;
     if (!o || !cast || !built.mh) return;
     const sc = o.scene;

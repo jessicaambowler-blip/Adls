@@ -1,4 +1,4 @@
-import { CHAIRS } from '../model/catalogue';
+import { CHAIRS, chairOf } from '../model/catalogue';
 import { add, clearOpening, dist, headingOf, itemToPlan, rotate, wallPoint } from '../model/geometry';
 import { chairFootprint, obstaclesOf, planRoute, sampleAt, type RouteResult } from '../model/pathfinding';
 import { fitPoint, fitToBed, fitWeight, getOriginal, sampleTrack, toPlan, ueYaw, type BedFit, type OriginalSceneData } from '../originals/originals';
@@ -175,7 +175,7 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
 };
 
 const buildActivityInner = (layout: Layout, settings: ActivitySettings, importedDuration = 0): BuiltActivity => {
-  const C = CHAIRS[settings.chair];
+  const C = chairOf(settings);
   const scale = settings.persona.heightCm / 175;
   const manual = settings.chair === 'manual';
   let s = settings.transferSide === 'left' ? -1 : 1;

@@ -150,11 +150,15 @@ export interface ActivitySettings {
   /** bed transfer method: the recorded hoist transfer (Persona 2 only) or a side (sliding) transfer */
   bedMethod?: 'hoist' | 'side';
   chair: ChairType;
+  /** the client's wheelchair sizes (mm); used for routes and clearance checks */
+  chairSpec?: import('./catalogue').ChairSpec;
   supportPerson: boolean;
   /** side of the bed/toilet to transfer from, as seen when facing its front */
   transferSide: 'auto' | 'left' | 'right';
   persona: PersonaSettings;
   showSweptPath: boolean;
+  /** show turning circles and doorway checks */
+  showClearances?: boolean;
   /** imported item to drive with the timeline when type === 'imported' */
   importedItemId?: string;
   /** which original VisADLs recording to play when type === 'original' */
@@ -180,6 +184,8 @@ export interface Project {
   title: string;
   consumerName: string;
   otName: string;
+  /** details for the written report */
+  report?: { address?: string; organisation?: string; funding?: string; date?: string; goal?: string; recommendation?: string };
   layouts: Record<LayoutKey, Layout>;
   activity: ActivitySettings;
   notes: Note[];

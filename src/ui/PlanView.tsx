@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActivity } from '../activities/useActivity';
-import { CHAIRS, catalogueEntry, itemBlocks, itemLabel } from '../model/catalogue';
+import { useClearances } from '../activities/useClearances';
+import { CHAIRS, chairOf, catalogueEntry, itemBlocks, itemLabel } from '../model/catalogue';
 import {
   add, clearOpening, dirOfHeading, dist, headingOf, itemCorners, itemToPlan, layoutBounds, mul, nearestWall, norm,
   projectOnSegment, rotate, solidWallRects, sub, uid, wallDir, wallLength, wallNormal, wallPoint,
@@ -120,10 +121,10 @@ const ItemSymbol = ({ it, fs }: { it: Item; fs: number }) => {
 const LiveChair = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const built = useActivity(layoutKey);
   const time = useStore((s) => s.time);
-  const chair = useStore((s) => s.project.activity.chair);
-  const type = useStore((s) => s.project.activity.type);
+  const act = useStore((s) => s.project.activity);
+  const type = act.type;
   if (type === 'imported') return null;
-  const C = CHAIRS[chair];
+  const C = chairOf(act);
   const c = built.chair(time);
   const p = built.person(time);
   const fp = chairFootprint(c, C.width, C.length);
@@ -154,6 +155,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const updateLayout = useStore((s) => s.updateLayout);
   const checkpoint = useStore((s) => s.checkpoint);
   const built = useActivity(layoutKey);
+  const clearances2 = useClearances(layoutKey);
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [vb, setVb] = useState<VB>({ x: -500, y: -500, w: 5000, h: 5000 });
@@ -554,7 +556,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     return out;
   }, [selectedItem, wallRects, layout.items]);
 
-  const C = CHAIRS[settings.chair];
+  const C = chairOf(settings);
   const route = settings.type !== 'imported' ? built.route : undefined;
   const prints = useMemo(() => {
     if (!route || !settings.showSweptPath) return [];
@@ -768,6 +770,18 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
           );
         })}
 
+        {/* clearance guides: turning circles in each room, and doorways too narrow for the chair */}
+        {settings.showClearances !== false && clearances2.map((c, i) => c.kind === 'turn' ? (
+          <g key={`cl${i}`} pointerEvents="none" className={`cl-turn ${c.status}`}>
+            <circle cx={c.at.x} cy={c.at.y} r={c.need / 2} />
+            {c.status !== 'ok' && <text x={c.at.x} y={c.at.y + fs * 0.3} fontSize={fs * 0.75} textAnchor="middle">⌀{c.max}</text>}
+          </g>
+        ) : c.status !== 'ok' ? (
+          <g key={`cl${i}`} pointerEvents="none" className={`cl-door ${c.status}`}>
+            <circle cx={c.at.x} cy={c.at.y} r={fs * 0.9} />
+            <text x={c.at.x} y={c.at.y + fs * 0.35} fontSize={fs} textAnchor="middle">!</text>
+          </g>
+        ) : null)}
         {/* contacts */}
         {route?.contacts.map((c, i) => <circle key={i} cx={c.at.x} cy={c.at.y} r={220} className="contact" pointerEvents="none" />)}
 

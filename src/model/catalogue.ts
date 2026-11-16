@@ -63,3 +63,27 @@ export const CHAIRS = {
   manual: { label: 'Manual wheelchair', width: 640, length: 1000, seatHeight: 500 },
   power: { label: 'Powered wheelchair', width: 640, length: 1150, seatHeight: 520 },
 } as const;
+
+/** Typical chairs to start from; every size can be changed to match the client's own chair. */
+export const CHAIR_PRESETS: { id: ChairSpec['preset']; label: string; model: 'manual' | 'power'; width: number; length: number; turn: number }[] = [
+  { id: 'manual', label: 'Manual', model: 'manual', width: 640, length: 1000, turn: 1500 },
+  { id: 'power', label: 'Powered', model: 'power', width: 640, length: 1150, turn: 1700 },
+  { id: 'tilt', label: 'Tilt-in-space', model: 'power', width: 680, length: 1250, turn: 1800 },
+  { id: 'bariatric', label: 'Bariatric', model: 'power', width: 760, length: 1150, turn: 1800 },
+];
+
+export interface ChairSpec { preset: 'manual' | 'power' | 'tilt' | 'bariatric' | 'custom'; width: number; length: number; turn: number }
+
+/** The wheelchair used for planning: the client's own sizes when given, else the model's defaults. */
+export const chairOf = (s: { chair: 'manual' | 'power'; chairSpec?: ChairSpec }) => {
+  const base = CHAIRS[s.chair];
+  const p = CHAIR_PRESETS.find((x) => x.id === s.chairSpec?.preset) ?? CHAIR_PRESETS.find((x) => x.id === s.chair)!;
+  const sp = s.chairSpec;
+  return {
+    label: sp?.preset === 'custom' ? `Client's ${base.label.toLowerCase()}` : sp ? `${p.label} wheelchair` : base.label,
+    width: sp?.width ?? base.width,
+    length: sp?.length ?? base.length,
+    seatHeight: base.seatHeight,
+    turn: sp?.turn ?? p.turn,
+  };
+};

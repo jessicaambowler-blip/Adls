@@ -1,6 +1,6 @@
 import { ACTIVITY_INFO } from '../activities/activities';
 import { useActivity } from '../activities/useActivity';
-import { CHAIRS, itemLabel } from '../model/catalogue';
+import { chairOf, itemLabel } from '../model/catalogue';
 import { diffLayouts, rectInfo } from '../model/edit';
 import { clearOpening, itemCorners, layoutBounds, solidWallRects, wallLength, wallNormal, wallPoint } from '../model/geometry';
 import { rampLength } from '../model/place';
@@ -8,6 +8,8 @@ import type { Item } from '../model/types';
 import { useStore } from '../model/store';
 import type { Layout, LayoutKey } from '../model/types';
 import { RouteSummary } from './ActivityPanel';
+import { useClearances } from '../activities/useClearances';
+import type { Check } from '../model/clearance';
 import { fmtTime } from './controls';
 import { CATEGORIES } from './NotesPanel';
 import { HOSTED } from './dialogs';
@@ -94,14 +96,14 @@ const RampElevation = ({ it }: { it: Item }) => {
   );
 };
 
-const Shot = ({ k, l, route }: { k: LayoutKey; l: Layout; route?: { x: number; y: number }[] }) => {
+const Shot = ({ k, l, route, planIfNo3d = true }: { k: LayoutKey; l: Layout; route?: { x: number; y: number }[]; planIfNo3d?: boolean }) => {
   const canvases = document.querySelectorAll<HTMLCanvasElement>(`.scene3d canvas`);
   // the 3D picture of this layout if it is on screen, otherwise a plan drawing
   const labels = [...document.querySelectorAll('.scene3d')];
   const idx = labels.findIndex((el) => el.querySelector(`.scene-label.${k}`));
   const c = canvases[idx >= 0 ? idx : 0];
   const active = useStore.getState().activeLayout;
-  if (!c || (idx < 0 && active !== k)) return <MiniPlan l={l} route={route} />;
+  if (!c || (idx < 0 && active !== k)) return planIfNo3d ? <MiniPlan l={l} route={route} /> : null;
   try {
     return <img className="shot" src={c.toDataURL('image/jpeg', 0.85)} alt={`3D view of the ${k} layout`} />;
   } catch {
@@ -116,12 +118,16 @@ export const Summary = () => {
   const ex = useActivity('existing');
   const pr = useActivity('proposed');
   const changes = diffLayouts(p.layouts.existing, p.layouts.proposed);
+  const r = p.report ?? {};
+  const rep = (x: Partial<NonNullable<typeof p.report>>) => update({ report: { ...r, ...x } });
+  const C = chairOf(p.activity);
+  const clEx = useClearances('existing'), clPr = useClearances('proposed');
   const date = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 
   const download = () => {
     const el = document.getElementById('summary-doc');
     if (!el) return;
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${p.title}</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:2em auto;padding:0 1em;color:#1d2733}h1,h2{color:#173a5e}img{max-width:100%;border:1px solid #ccc}.result{padding:.6em;border-left:4px solid #888;background:#f5f5f5;margin:.4em 0}.caveat{font-size:13px;color:#555}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left}</style></head><body>${el.innerHTML}</body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${p.title}</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:2em auto;padding:0 1em;color:#1d2733}h1,h2{color:#173a5e}img{max-width:100%;border:1px solid #ccc}.result{padding:.6em;border-left:4px solid #888;background:#f5f5f5;margin:.4em 0}.caveat{font-size:13px;color:#555}table{border-collapse:collapse;width:100%;margin:.5em 0}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top}th{background:#f4f6f8}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.elevs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}svg{max-width:100%;height:auto}.ok{color:#2e7d32}.tight{color:#b26a00}.no{color:#c62828}.signoff{display:flex;gap:24px;flex-wrap:wrap;margin:2em 0}.muted{color:#777}</style></head><body>${el.innerHTML}</body></html>`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     a.download = `${p.title.replace(/[^\w-]+/g, '_')}_summary.html`;
@@ -140,39 +146,69 @@ export const Summary = () => {
           )}
           <button onClick={() => set({ showSummary: false })}>Close</button>
         </div>
-        <div className="no-print grid2">
-          <label className="text">Session title<input value={p.title} onChange={(e) => update({ title: e.target.value })} /></label>
-          <label className="text">Consumer<input value={p.consumerName} onChange={(e) => update({ consumerName: e.target.value })} /></label>
+        <div className="no-print report-form">
+          <label className="text">Report title<input value={p.title} onChange={(e) => update({ title: e.target.value })} /></label>
+          <label className="text">Client<input value={p.consumerName} onChange={(e) => update({ consumerName: e.target.value })} /></label>
+          <label className="text">Address<input value={r.address ?? ''} onChange={(e) => rep({ address: e.target.value })} /></label>
+          <label className="text">Assessment date<input type="date" value={r.date ?? ''} onChange={(e) => rep({ date: e.target.value })} /></label>
           <label className="text">Occupational therapist<input value={p.otName} onChange={(e) => update({ otName: e.target.value })} /></label>
+          <label className="text">Organisation<input value={r.organisation ?? ''} onChange={(e) => rep({ organisation: e.target.value })} /></label>
+          <label className="text">Funding body
+            <input list="funders" value={r.funding ?? ''} onChange={(e) => rep({ funding: e.target.value })} />
+            <datalist id="funders">{['NDIS', 'My Aged Care / Support at Home', 'icare NSW', 'TAC', 'DVA', 'Private'].map((f) => <option key={f} value={f} />)}</datalist>
+          </label>
+          <label className="text wide2">Reason for referral and goals<textarea rows={2} value={r.goal ?? ''} onChange={(e) => rep({ goal: e.target.value })} placeholder="e.g. Unable to access bedroom and bathroom in powered wheelchair; goal to transfer to bed with hoist and carer" /></label>
+          <label className="text wide2">Recommendation<textarea rows={2} value={r.recommendation ?? ''} onChange={(e) => rep({ recommendation: e.target.value })} placeholder="Summary of what is recommended and why" /></label>
         </div>
         <article id="summary-doc" className="summary-doc">
-          <h1>{p.title}</h1>
-          <p>{date}{p.consumerName && <> · Consumer: {p.consumerName}</>}{p.otName && <> · OT: {p.otName}</>}</p>
-          <p>
-            Activity explored: <b>{ACTIVITY_INFO[p.activity.type].label}</b>
-            {p.activity.character === 'p2' ? <> by Persona 2</> : null} with a {CHAIRS[p.activity.chair].label.toLowerCase()}
-            {p.activity.character === 'p2' && p.activity.type === 'bed-transfer' && p.activity.bedMethod !== 'side' ? <>, transferring with a ceiling hoist and a carer (recorded movement)</> : p.activity.supportPerson ? ' and a support person' : ''}.
-          </p>
+          <header className="rep-head">
+            <h1>{p.title}</h1>
+            <table className="rep-details"><tbody>
+              <tr><th>Client</th><td>{p.consumerName || '—'}</td><th>Assessment date</th><td>{r.date ? new Date(r.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : date}</td></tr>
+              <tr><th>Address</th><td>{r.address || '—'}</td><th>Funding body</th><td>{r.funding || '—'}</td></tr>
+              <tr><th>Occupational therapist</th><td>{p.otName || '—'}</td><th>Organisation</th><td>{r.organisation || '—'}</td></tr>
+            </tbody></table>
+          </header>
 
-          <h2>Existing and proposed layouts</h2>
+          <h2>1. Reason for referral and goals</h2>
+          <p>{r.goal || <span className="muted">Not recorded.</span>}</p>
+
+          <h2>2. Wheelchair and activity</h2>
+          <table className="rep-details"><tbody>
+            <tr><th>Wheelchair</th><td>{C.label} – {C.width} mm wide × {C.length} mm long, turning circle ⌀{C.turn} mm</td></tr>
+            <tr><th>Activity</th><td>{ACTIVITY_INFO[p.activity.type].label}{p.activity.character === 'p2' && p.activity.type === 'bed-transfer' && p.activity.bedMethod !== 'side' ? ' – ceiling hoist transfer with a carer' : p.activity.supportPerson ? ' – with a support person' : ''}</td></tr>
+          </tbody></table>
+
+          <h2>3. Findings – existing home</h2>
           <div className="two-col">
-            <div><h3>Existing</h3><Shot k="existing" l={p.layouts.existing} route={ex.route?.samples.filter((_, i) => i % 5 === 0)} /><LayoutFacts l={p.layouts.existing} /><RouteSummary built={ex} layoutKey="existing" /></div>
-            <div><h3>Proposed</h3><Shot k="proposed" l={p.layouts.proposed} route={pr.route?.samples.filter((_, i) => i % 5 === 0)} /><LayoutFacts l={p.layouts.proposed} /><RouteSummary built={pr} layoutKey="proposed" /></div>
+            <div><Shot k="existing" l={p.layouts.existing} route={ex.route?.samples.filter((_, i) => i % 5 === 0)} /></div>
+            <div><RouteSummary built={ex} layoutKey="existing" /><RouteSummary built={pr} layoutKey="proposed" /></div>
           </div>
+          <h3>Clearances</h3>
+          <table className="mods clear-table"><thead><tr><th>Space</th><th>Needed</th><th>Existing</th><th>Proposed</th></tr></thead>
+            <tbody>{clEx.map((c, i) => {
+              const nm = c.kind === 'turn' ? `${c.room} – turning space` : c.name;
+              const o = clPr.find((x) => (x.kind === 'turn' ? `${x.room} – turning space` : x.name) === nm);
+              const v = (x?: Check) => (!x ? '—' : x.kind === 'turn' ? `⌀${x.max}` : `${x.clear} clear`);
+              const m = (x?: Check) => (!x ? '' : x.status === 'ok' ? ' ✓' : x.status === 'tight' ? ' (tight)' : ' ✗');
+              return <tr key={i}><td>{nm}</td><td>{c.kind === 'turn' ? `⌀${c.need}` : `${c.need}`}</td><td className={c.status}>{v(c)}{m(c)}</td><td className={o?.status}>{v(o)}{m(o)}</td></tr>;
+            })}</tbody></table>
 
-          <h2>Proposed modifications</h2>
+          <h2>4. Recommended modifications</h2>
+          {r.recommendation && <p>{r.recommendation}</p>}
           {changes.length ? (
             <table className="mods"><thead><tr><th>#</th><th>Modification</th><th>Details</th></tr></thead>
               <tbody>{changes.map((c, i) => <tr key={i}><td>{i + 1}</td><th>{c.what}</th><td>{c.detail}</td></tr>)}</tbody></table>
           ) : <p>No differences between existing and proposed layouts yet.</p>}
 
-          <h2>Proposed plan</h2>
+          <h2 className="page-break">5. Proposed layout</h2>
           <p className="caveat">Dimensions in mm. Not to scale.</p>
           <MiniPlan l={p.layouts.proposed} />
+          <Shot k="proposed" l={p.layouts.proposed} planIfNo3d={false} />
 
           {p.layouts.proposed.items.some((i) => i.kind === 'ramp' || i.kind.startsWith('grab-rail')) && (
             <>
-              <h2>Elevations</h2>
+              <h2>6. Elevations</h2>
               <div className="elevs">
                 {p.layouts.proposed.items.filter((i) => i.kind.startsWith('grab-rail')).map((i, n) => <figure key={i.id}><RailElevation it={i} /><figcaption>{n + 1}. {itemLabel(i.kind, i.label)} – {i.w} mm{ i.kind === 'grab-rail-l' ? ` × ${i.h} mm` : ''}, {i.elevation ?? 800} mm above floor</figcaption></figure>)}
                 {p.layouts.proposed.items.filter((i) => i.kind === 'ramp' && i.ramp).map((i) => <figure key={i.id}><RampElevation it={i} /><figcaption>Ramp – rise {i.ramp!.rise} mm at 1:{i.ramp!.gradient}, {i.w} mm wide, {rampLength(i.ramp!)} mm long including a {i.ramp!.landing} mm landing</figcaption></figure>)}
@@ -193,7 +229,9 @@ export const Summary = () => {
             );
           })}
 
-          <h2>About this summary</h2>
+          <div className="signoff"><span>Occupational therapist: ______________________</span><span>Signature: ______________________</span><span>Date: ____________</span></div>
+
+          <h2>About this report</h2>
           <p className="caveat">
             These visualisations were created to support a shared conversation between the consumer and their occupational therapist.
             They are not a clinical assessment, building certification or a guarantee that a modification will work.
