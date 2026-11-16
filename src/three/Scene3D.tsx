@@ -16,7 +16,8 @@ import type { ActivitySettings, Item, Layout, LayoutKey } from '../model/types';
 import { ASSETS } from './assets';
 import { SUPPORT_PERSONA, applyPose, buildAvatar, type AvatarRig } from './avatar';
 import { buildItem } from './furniture';
-import { buildWalls, floorMaterial } from './walls';
+import { buildWalls, floorMaterial, floorMaterialOf } from './walls';
+import { finishOf, roomsOf } from '../model/finishes';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
 import { PersonaActors } from './PersonaActors';
@@ -86,7 +87,7 @@ const Lights = ({ layout, hq }: { layout: Layout; hq: boolean }) => {
 // ---------------------------------------------------------------- building
 
 const Walls = ({ layout }: { layout: Layout }) => {
-  const builds = useMemo(() => buildWalls(layout), [layout.walls, layout.openings, layout.ceilingHeight, layout.wallColor, layout.floor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const builds = useMemo(() => buildWalls(layout), [layout.walls, layout.openings, layout.ceilingHeight, layout.wallColor, layout.floor, layout.labels]); // eslint-disable-line react-hooks/exhaustive-deps
   const group = useRef<THREE.Group>(null);
   const tmp = useMemo(() => new THREE.Vector3(), []);
   useFrame(({ camera }) => {
@@ -111,6 +112,71 @@ const Walls = ({ layout }: { layout: Layout }) => {
           <primitive object={w.low} />
         </group>
       ))}
+    </group>
+  );
+};
+
+/** Each named room's own floor, ceiling colour and light fittings (fittings only from below the ceiling). */
+const RoomFinishes = ({ layout }: { layout: Layout }) => {
+  const rooms = useMemo(() => roomsOf(layout).map((r) => ({ ...r, f: finishOf(layout, r.label.finish), own: r.label.finish })), [layout.walls, layout.labels, layout.floor, layout.wallColor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fittings = useRef<THREE.Group>(null);
+  const H = layout.ceilingHeight / 1000;
+  useFrame(({ camera }) => { if (fittings.current) fittings.current.visible = camera.position.y < H; });
+  // smaller rooms sit a hair higher, so where open-plan spaces overlap the smaller one shows
+  const rank = (r: { rect: { x0: number; x1: number; y0: number; y1: number } }) => rooms.filter((o) => (o.rect.x1 - o.rect.x0) * (o.rect.y1 - o.rect.y0) > (r.rect.x1 - r.rect.x0) * (r.rect.y1 - r.rect.y0)).length;
+  const parts = useMemo(() => rooms.map((r) => {
+    const { x0, x1, y0, y1 } = r.rect;
+    const w = (x1 - x0) / 1000, d = (y1 - y0) / 1000, cx = (x0 + x1) / 2000, cz = (y0 + y1) / 2000;
+    const floor = r.own?.floor || r.own?.floorColour ? floorMaterialOf(r.f.floor, r.f.floorColour, w, d) : null;
+    const ceil = r.own?.ceilingColour ? new THREE.MeshStandardMaterial({ color: r.f.ceilingColour, roughness: 0.95 }) : null;
+    return { key: r.label.id, w, d, cx, cz, floor, ceil, lights: r.f.lights, lift: rank(r) * 0.0006 };
+  }), [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
+  const glow = useMemo(() => new THREE.MeshStandardMaterial({ color: '#fffaf0', emissive: '#fff4d6', emissiveIntensity: 1.2 }), []);
+  const trim = useMemo(() => new THREE.MeshStandardMaterial({ color: '#e8e6e1', roughness: 0.4, metalness: 0.2 }), []);
+  return (
+    <group>
+      {parts.map((p) => (
+        <group key={p.key}>
+          {p.floor && (
+            <mesh rotation-x={-Math.PI / 2} position={[p.cx, 0.0015 + p.lift, p.cz]} receiveShadow material={p.floor}>
+              <planeGeometry args={[p.w, p.d]} />
+            </mesh>
+          )}
+          {p.ceil && (
+            <mesh rotation-x={Math.PI / 2} position={[p.cx, H - 0.002 - p.lift, p.cz]} material={p.ceil}>
+              <planeGeometry args={[p.w, p.d]} />
+            </mesh>
+          )}
+        </group>
+      ))}
+      <group ref={fittings}>
+        {parts.map((p) => {
+          if (p.lights === 'pendant') return (
+            <group key={p.key} position={[p.cx, H, p.cz]}>
+              <mesh position={[0, -0.25, 0]} material={trim}><cylinderGeometry args={[0.004, 0.004, 0.5, 6]} /></mesh>
+              <mesh position={[0, -0.6, 0]} material={trim}><coneGeometry args={[0.18, 0.2, 24, 1, true]} /></mesh>
+              <mesh position={[0, -0.66, 0]} material={glow}><sphereGeometry args={[0.05, 12, 8]} /></mesh>
+            </group>
+          );
+          if (p.lights === 'batten') return (
+            <mesh key={p.key} position={[p.cx, H - 0.03, p.cz]} material={glow} rotation-y={p.w > p.d ? 0 : Math.PI / 2}><boxGeometry args={[1.2, 0.05, 0.08]} /></mesh>
+          );
+          if (p.lights === 'downlights') {
+            // about one every 1.6 m, kept off the walls
+            const nx = Math.max(1, Math.round(p.w / 1.6)), nz = Math.max(1, Math.round(p.d / 1.6));
+            return (
+              <group key={p.key}>
+                {Array.from({ length: nx * nz }, (_, i) => (
+                  <mesh key={i} rotation-x={Math.PI / 2} position={[p.cx - p.w / 2 + (p.w * ((i % nx) + 0.5)) / nx, H - 0.004, p.cz - p.d / 2 + (p.d * (Math.floor(i / nx) + 0.5)) / nz]} material={glow}>
+                    <circleGeometry args={[0.045, 20]} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          }
+          return null;
+        })}
+      </group>
     </group>
   );
 };
@@ -724,6 +790,7 @@ const SceneContents = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         placeAt(layoutKey, { x: e.point.x * 1000, y: e.point.z * 1000 });
       }}>
         <Floor layout={layout} />
+        <RoomFinishes layout={layout} />
         <Walls layout={layout} />
         <Items layout={layout} settings={settings} layoutKey={layoutKey} />
       </group>

@@ -1,6 +1,6 @@
 import { CATALOGUE } from './catalogue';
 import { uid } from './geometry';
-import type { Item, ItemKind, Layout, Opening, Project, Wall } from './types';
+import type { RoomFinish, Item, ItemKind, Layout, Opening, Project, Wall } from './types';
 import type { OriginalSceneData } from '../originals/originals';
 import { splitAtJunctions } from './walls';
 
@@ -241,7 +241,9 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     makeItem('surface', (x0 + x1) / 2, (y0 + y1) / 2, 0, { surface, label: surface[0].toUpperCase() + surface.slice(1), w: x1 - x0, d: y1 - y0 });
   items.push(
     // (in the proposed yard the lawn stops short of the ramp and pavers rather than running under them)
-    ...(P ? [sf('lawn', -1500, yard + 1500, 8900, 17500), sf('lawn', -1500, yard, doorX - 750, yard + 1500)] : [sf('lawn', -1500, yard, 8900, 17500)]),
+    sf('lawn', -1500, yard + 1500, 8900, 17500), sf('lawn', -1500, yard, doorX - 750, yard + 1500),
+    // (the strip in front of the house is lawn now; the proposal replaces it with the ramp and pavers)
+    ...(P ? [] : [sf('lawn', doorX - 750, yard, 8900, yard + 1500)]),
     sf('concrete', 8900, yard, 12900, 18100),
     makeItem('car-space', 10900, 15300),
     makeItem('car', 10300, 15300),
@@ -251,6 +253,25 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     makeItem('tree', 4600, 16600),
     makeItem('fence', 3700, 17500, 0, { w: 10400 }),
   );
+  // finishes: carpet in the bedrooms and living, a part-tiled bathroom; the proposal swaps the main
+  // bedroom carpet for firm vinyl, tiles the shower room floor to ceiling and lifts the entry mat
+  const FINISHES: Record<string, RoomFinish> = P
+    ? {
+      'Bedroom 1': { floor: 'vinyl', floorColour: '#b7a58e', wallColour: '#dfe6e3', lights: 'batten' },
+      'Bedroom 2': { floor: 'carpet', floorColour: '#6f7783' },
+      Bathroom: { floor: 'tiles', floorColour: '#9ea3a6', wallTiles: 'full', lights: 'batten' },
+      Living: { floor: 'carpet', floorColour: '#8b7d6b', wallColour: '#efe3d0', lights: 'pendant' },
+      'Kitchen & dining': { floor: 'vinyl', floorColour: '#c4beb2', lights: 'downlights' },
+    }
+    : {
+      'Bedroom 1': { floor: 'carpet', floorColour: '#968c80', wallColour: '#ece6dc', lights: 'pendant' },
+      'Bedroom 2': { floor: 'carpet', floorColour: '#6f7783' },
+      Bathroom: { floor: 'tiles', floorColour: '#c9b9a3', wallTiles: 'half', wallColour: '#d9e1ea', lights: 'batten' },
+      Living: { floor: 'carpet', floorColour: '#8b7d6b', wallColour: '#efe3d0', lights: 'pendant' },
+      'Kitchen & dining': { floor: 'vinyl', floorColour: '#c4beb2', lights: 'downlights' },
+    };
+  if (!P) items.push(makeItem('rug', doorX, 9250, 0, { w: 1200, d: 800, label: 'Entry mat' }));
+
   if (P) {
     // ramp along the front of the house: a landing at the door, sloping down to the east
     const rise = 150, gradient = 14, landing = 1500, len = rise * gradient + landing;
@@ -272,7 +293,7 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     floor: 'timber',
     wallColor: '#efebe4',
     labels: ([['Bedroom 1', 1700, 3550], ['Bathroom', 5500, 3550], ['Bedroom 2', 9000, 3200], ['Hallway', 7300, 4550], ['Living', 1500, 5800], ['Kitchen & dining', 8000, 5750]] as const)
-      .map(([text, x, y]) => ({ id: uid('label'), text, x, y })),
+      .map(([text, x, y]) => ({ id: uid('label'), text, x, y, ...(FINISHES[text] ? { finish: FINISHES[text] } : {}) })),
     ground: -150,
     // getting out of the car in the car space's shared zone
     start: { x: 12300, y: 12900, heading: 135 },

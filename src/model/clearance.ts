@@ -1,5 +1,6 @@
 import { clearOpening, layoutBounds, layoutCentre, wallPoint } from './geometry';
 import { roomAround } from './place';
+import { roomsOf } from './finishes';
 import { obstaclesOf } from './pathfinding';
 import type { Layout, Vec2 } from './types';
 
@@ -54,9 +55,11 @@ const biggestCircle = (polys: Vec2[][], r: { x0: number; x1: number; y0: number;
 export const checkClearances = (l: Layout, chair: { width: number; turn: number }): Check[] => {
   const out: Check[] = [];
   const polys = obstaclesOf(l).map((o) => o.poly);
-  const rooms = (l.labels?.length ? l.labels : [{ text: 'Room', ...layoutCentre(l) }]).filter((r) => !/hall/i.test(r.text));
+  // named rooms (open-plan spaces shared out between their names), or the whole layout if none
+  const named = roomsOf(l).filter((r) => !/hall/i.test(r.label.text));
+  const rooms = l.labels?.length ? named.map((r) => ({ text: r.label.text, rect: r.rect as typeof r.rect | null })) : [{ text: 'Room', rect: roomAround(l, layoutCentre(l)) }];
   for (const room of rooms) {
-    const rect = roomAround(l, room);
+    const rect = room.rect;
     if (!rect || rect.x1 - rect.x0 < 500 || rect.y1 - rect.y0 < 500) continue;
     const c = biggestCircle(polys, rect);
     const status: Status = c.diameter >= chair.turn ? 'ok' : c.diameter >= chair.turn - 200 ? 'tight' : 'no';

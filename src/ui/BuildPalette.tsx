@@ -55,7 +55,7 @@ const GROUPS: { name: string; entries: Entry[] }[] = [
     name: 'Furniture', entries: [
       it('bed-adjustable', '🛏', 'Care bed'), it('bed-single', '▭', 'Single bed'), it('bed-queen', '▢', 'Queen bed'), it('bedside-table', '▫', 'Bedside'),
       it('wardrobe', '▤', 'Wardrobe'), it('armchair', '🪑', 'Armchair'), it('sofa', '🛋', 'Sofa'), it('dining-table', '▭', 'Table'),
-      it('dining-chair', '⑃', 'Chair'), it('kitchen-bench', '▬', 'Bench'), it('fridge', '▯', 'Fridge'), it('mobile-hoist', '⛓', 'Hoist'),
+      it('dining-chair', '⑃', 'Chair'), it('kitchen-bench', '▬', 'Bench'), it('fridge', '▯', 'Fridge'), it('mobile-hoist', '⛓', 'Hoist'), it('rug', '▤', 'Rug', 'Floor rug (castors can catch on it)'),
     ],
   },
 ];

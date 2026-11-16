@@ -1,3 +1,4 @@
+import { finishOf } from './finishes';
 import { catalogueEntry, itemLabel } from './catalogue';
 import { add, clearOpening, dist, layoutBounds, wallPoint } from './geometry';
 import type { Layout, Vec2 } from './types';
@@ -88,6 +89,17 @@ export const diffLayouts = (a: Layout, b: Layout): Change[] => {
     if (oa.kind === ob.kind && (oa.swingSide !== ob.swingSide || oa.hinge !== ob.hinge)) out.push({ what: `${name} swing`, detail: 'Hinge side or swing direction changed' });
   }
   for (const oa of a.openings) if (!usedO.has(oa.id) && !b.openings.some((o) => o.id === oa.id)) { here = roomNear(centre(a, oa)); out.push({ what: `${kindName(oa.kind)} removed`, detail: `${oa.width} mm` }); }
+  // room finishes that matter for getting about: floor coverings, wall tiling and lighting
+  const floorName = (f: string) => ({ timber: 'timber', carpet: 'carpet', vinyl: 'vinyl', tiles: 'tiles', concrete: 'concrete' } as Record<string, string>)[f] ?? f;
+  const tilesName = (t: string) => (t === 'full' ? 'tiled floor to ceiling' : t === 'half' ? 'tiled to 1.2 m' : 'no wall tiles');
+  for (const lb of b.labels ?? []) {
+    const la = (a.labels ?? []).find((x) => x.text === lb.text);
+    if (!la) continue;
+    const fa = finishOf(a, la.finish), fb = finishOf(b, lb.finish);
+    if (fa.floor !== fb.floor) out.push({ what: `${lb.text} floor`, detail: `${floorName(fa.floor)} → ${floorName(fb.floor)}` });
+    if (fa.wallTiles !== fb.wallTiles) out.push({ what: `${lb.text} walls`, detail: `${tilesName(fa.wallTiles)} → ${tilesName(fb.wallTiles)}` });
+    if (fa.lights !== fb.lights) out.push({ what: `${lb.text} lighting`, detail: `${fa.lights} → ${fb.lights}` });
+  }
   // items: the same item (by id), else the nearest unmatched one of the same kind (layouts built
   // separately, e.g. the demo house, don't share ids)
   const used = new Set<string>();

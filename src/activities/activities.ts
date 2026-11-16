@@ -69,6 +69,8 @@ export interface BuiltActivity {
   props?: ActivityProp[];
   /** steps the route goes over */
   steps?: string[];
+  /** how many loose rugs the route crosses */
+  rugs?: number;
   /** rough ground surfaces the route crosses */
   rough?: string[];
   /** where the chair is too wide for the space (e.g. a doorway) – shown, but it still carries on */
@@ -186,9 +188,11 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
     if (it.kind !== 'surface' || !surfaceInfo(it.surface).rough) continue;
     if (b.route?.samples.some((s, i) => i % 3 === 0 && on(it, s) && !smooth.some((m) => on(m, s)))) rough.add(surfaceInfo(it.surface).label.toLowerCase());
   }
+  // loose rugs on the way (castors catch on the edges; a trip hazard for walkers too)
+  const rugs = layout.items.filter((it) => it.kind === 'rug' && b.route?.samples.some((s, i) => i % 3 === 0 && on(it, s))).length;
   // steps the route goes over (a wheelchair can't)
   const steps = layout.items.filter((it) => it.kind === 'step' && it.h >= 15 && b.route?.samples.some((s) => Math.abs(itemToLocal(it, s).x) < it.w / 2 && Math.abs(itemToLocal(it, s).y) < it.d / 2)).map((it) => `${it.h} mm step`);
-  return { ...out, ...(rough.size ? { rough: [...rough] } : {}), ...(steps.length ? { steps } : {}) };
+  return { ...out, ...(rough.size ? { rough: [...rough] } : {}), ...(steps.length ? { steps } : {}), ...(rugs ? { rugs } : {}) };
 };
 
 const buildActivityInner = (layout: Layout, settings: ActivitySettings, importedDuration = 0): BuiltActivity => {

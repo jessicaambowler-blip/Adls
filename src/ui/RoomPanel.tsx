@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
 import { CATALOGUE, catalogueEntry, itemLabel } from '../model/catalogue';
 import { clearOpening, layoutCentre, uid, wallLength, wallNormal, wallPoint } from '../model/geometry';
-import { rampLength, rampNote } from '../model/place';
+import { rampLength, rampNote, roomAround } from '../model/place';
 import { SURFACES, surfaceInfo } from '../model/ground';
 import { applyWallDrag, beginWallDrag, removeWall, setWallLength, splitAtJunctions, splitWall, tidyWalls } from '../model/walls';
 import { rectInfo, setRoomSize } from '../model/edit';
 import { useStore } from '../model/store';
 import { TEMPLATES, blankRoom, cloneLayout, lowsetHouse, makeItem } from '../model/templates';
-import type { FloorFinish, Item, Opening } from '../model/types';
+import type { Item, Opening, RoomFinish } from '../model/types';
+import { CEILING_COLOURS, FLOOR_COLOURS, FLOOR_OPTIONS, LIGHT_OPTIONS, WALL_COLOURS, faceName, finishOf } from '../model/finishes';
 import { loadModelFile } from '../three/assets';
 import { NumberField, Section, Segmented } from './controls';
 import { ask, notify } from './dialogs';
@@ -54,10 +55,6 @@ const VerifyCard = () => {
   );
 };
 
-const FLOORS: { value: FloorFinish; label: string }[] = [
-  { value: 'timber', label: 'Timber' }, { value: 'tiles', label: 'Tiles' }, { value: 'vinyl', label: 'Vinyl' }, { value: 'carpet', label: 'Carpet' },
-];
-const WALL_COLOURS = ['#ece6dc', '#f4f2ee', '#dfe6e3', '#e8dfd3', '#d9e1ea', '#efe3d0'];
 
 const readAsDataUrl = (f: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(f); });
 
@@ -220,6 +217,10 @@ const WallInspector = ({ id }: { id: string }) => {
         <button onClick={() => { let ids: [string, string] | null = null; updateLayout((l) => { ids = splitWall(l, id, wallPoint(w, L / 2)); }); if (ids) set({ selection: { type: 'wall', id: (ids as [string, string])[0] } }); }}>✂ Split in half</button>
         <button onClick={() => set({ tool: 'split-wall', selection: null })}>✂ Split at a point…</button>
       </div>
+      {([0, 1] as const).map((side) => (
+        <Swatches key={side} label={((n) => (n === 'Outside' ? 'Paint – outside' : `Paint – ${n} side`))(faceName(layout, w, side))} colours={WALL_COLOURS} value={w.paint?.[side]} auto="Same as the room"
+          onChange={(c) => updateLayout((l) => { const x = l.walls.find((q) => q.id === id); if (!x) return; const p: [string | null, string | null] = [...(x.paint ?? [null, null])] as [string | null, string | null]; p[side] = c ?? null; x.paint = p[0] || p[1] ? p : undefined; })} />
+      ))}
       <NumberField label="Thickness" value={w.thickness} onChange={(t) => updateLayout((l) => { const x = l.walls.find((q) => q.id === id); if (x) x.thickness = t; })} step={10} min={50} max={400} />
       <div className="row-label">Add to this wall</div>
       <div className="btnrow">
@@ -235,16 +236,52 @@ const WallInspector = ({ id }: { id: string }) => {
   );
 };
 
+/** A row of colour swatches; the striped first one means "same as the house". */
+const Swatches = ({ label, colours, value, onChange, auto = 'Same as the house' }: { label: string; colours: string[]; value?: string | null; onChange: (c: string | undefined) => void; auto?: string | null }) => (
+  <>
+    <div className="row-label">{label}</div>
+    <div className="swatches finish-swatches" role="radiogroup" aria-label={label}>
+      {auto && <button className={`none ${!value ? 'on' : ''}`} onClick={() => onChange(undefined)} title={auto} aria-label={auto} />}
+      {colours.map((c) => <button key={c} style={{ background: c }} className={value === c ? 'on' : ''} onClick={() => onChange(c)} aria-label={`${label} ${c}`} title={c} />)}
+    </div>
+  </>
+);
+
 const LabelInspector = ({ id }: { id: string }) => {
   const layout = useStore((s) => s.layout());
   const updateLayout = useStore((s) => s.updateLayout);
   const set = useStore((s) => s.set);
   const lb = layout.labels?.find((x) => x.id === id);
   if (!lb) return null;
+  const own = lb.finish ?? {};
+  const f = finishOf(layout, lb.finish);
+  const fin = (patch: RoomFinish) => updateLayout((l) => {
+    const x = l.labels?.find((q) => q.id === id);
+    if (!x) return;
+    const next: RoomFinish = { ...x.finish, ...patch };
+    (Object.keys(next) as (keyof RoomFinish)[]).forEach((k) => { if (next[k] === undefined) delete next[k]; });
+    x.finish = Object.keys(next).length ? next : undefined;
+  });
+  const hasRoom = !!roomAround(layout, lb);
   return (
     <div className="inspector">
-      <h3>Room name</h3>
+      <h3>Room</h3>
       <label className="text">Name<input value={lb.text} onChange={(e) => updateLayout((l) => { const x = l.labels?.find((q) => q.id === id); if (x) x.text = e.target.value; })} /></label>
+      {hasRoom ? (
+        <>
+          <div className="row-label">Floor</div>
+          <Segmented label="Floor" value={f.floor} options={FLOOR_OPTIONS} onChange={(floor) => fin({ floor, floorColour: undefined })} />
+          <Swatches label="Floor colour" colours={FLOOR_COLOURS[f.floor] ?? []} value={own.floorColour} onChange={(floorColour) => fin({ floorColour })} auto="Standard" />
+          <Swatches label="Walls" colours={WALL_COLOURS} value={own.wallColour} onChange={(wallColour) => fin({ wallColour })} />
+          <div className="row-label">Wall tiles</div>
+          <Segmented label="Wall tiles" value={f.wallTiles} options={[{ value: 'none', label: 'None' }, { value: 'half', label: 'To 1.2 m' }, { value: 'full', label: 'Full height' }]} onChange={(wallTiles) => fin({ wallTiles })} />
+          <Swatches label="Ceiling" colours={CEILING_COLOURS} value={own.ceilingColour} onChange={(ceilingColour) => fin({ ceilingColour })} auto="Standard white" />
+          <div className="row-label">Lights</div>
+          <Segmented label="Lights" value={f.lights} options={LIGHT_OPTIONS} onChange={(lights) => fin({ lights })} />
+          {lb.finish && <button className="linklike" onClick={() => fin({ floor: undefined, floorColour: undefined, wallColour: undefined, wallTiles: undefined, ceilingColour: undefined, lights: undefined })}>Same as the rest of the house</button>}
+          <p className="muted">Paint one wall differently: click the wall.</p>
+        </>
+      ) : <p className="muted">Move the name inside a room to set its floor, walls and ceiling.</p>}
       <div className="btnrow"><button className="danger" onClick={() => { updateLayout((l) => { l.labels = l.labels?.filter((x) => x.id !== id); }); set({ selection: null }); }}>Remove name</button></div>
     </div>
   );
@@ -433,12 +470,15 @@ export const RoomPanel = () => {
         ) : null}
         <NumberField label="Ground outside (vs floor)" value={layout.ground ?? 0} onChange={(v) => updateLayout((l) => { l.ground = Math.min(0, v); })} step={50} min={-1500} max={0} />
         <NumberField label="Ceiling height" value={layout.ceilingHeight} onChange={(v) => updateLayout((l) => { l.ceilingHeight = v; })} step={50} min={2100} max={4000} />
-        <div className="row-label">Floor</div>
-        <Segmented label="Floor finish" value={layout.floor} options={FLOORS} onChange={(floor) => updateLayout((l) => { l.floor = floor; })} />
-        <div className="row-label">Wall colour</div>
-        <div className="swatches">
-          {WALL_COLOURS.map((c) => <button key={c} style={{ background: c }} className={layout.wallColor === c ? 'on' : ''} onClick={() => updateLayout((l) => { l.wallColor = c; })} aria-label={`Wall colour ${c}`} />)}
-        </div>
+        <div className="row-label">Floor – whole house</div>
+        <Segmented label="Floor finish" value={layout.floor} options={FLOOR_OPTIONS} onChange={(floor) => updateLayout((l) => { l.floor = floor; })} />
+        <Swatches label="Walls – whole house" colours={WALL_COLOURS} value={layout.wallColor} onChange={(c) => updateLayout((l) => { l.wallColor = c ?? '#f4f2ee'; })} auto={null} />
+        {!!layout.labels?.length && (
+          <>
+            <div className="row-label">Finishes for one room</div>
+            <div className="chips">{layout.labels.map((lb) => <button key={lb.id} onClick={() => set({ selection: { type: 'label', id: lb.id } })}>{lb.finish ? '● ' : ''}{lb.text}</button>)}</div>
+          </>
+        )}
       </Section>
 
       <Section title="All furniture & equipment" open={false}>

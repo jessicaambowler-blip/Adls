@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { layoutBounds, layoutCentre, wallDir, wallLength, wallNormal } from '../model/geometry';
-import type { Layout, Opening, Wall } from '../model/types';
+import type { FloorFinish, Layout, Opening, Wall } from '../model/types';
 import { M, boxOn, mesh, paint, rod, std } from './build';
-import { carpetTexture, tileTexture, timberTexture, vinylTexture, wallTileTexture } from './textures';
+import { carpetTexture, outdoorTexture, tileTexture, timberTexture, vinylTexture, wallTileTexture } from './textures';
+import { roomsOf, wallFace, type Room } from '../model/finishes';
 
 export interface WallBuild {
   wall: Wall;
@@ -19,37 +20,60 @@ const LOW = 0.32;
 const capMat = std('#8f8a82', 0.9);
 const skirtingMat = paint('#f7f6f2', 0.5);
 
-const wallMaterial = (layout: Layout, len: number, h: number) => {
-  if (layout.floor === 'tiles') {
-    const t = wallTileTexture().clone();
-    t.needsUpdate = true;
-    t.repeat.set(len / 1.2, h / 1.2);
-    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 });
-  }
-  return paint(layout.wallColor, 0.85);
+const tileMat = (len: number, h: number) => {
+  const t = wallTileTexture().clone();
+  t.needsUpdate = true;
+  t.repeat.set(len / 1.2, h / 1.2);
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 });
 };
 
-const piece = (layout: Layout, w: Wall, u0: number, u1: number, y0: number, y1: number, L: number, skirting: boolean) => {
+/** height of a tiled splashback */
+const HALF_TILES = 1.2;
+
+/** Where along a wall (m) the rooms on either side change, so each stretch can take its room's finish. */
+const roomCuts = (rooms: Room[], w: Wall) => {
+  const d = wallDir(w), cuts: number[] = [];
+  for (const r of rooms) {
+    if (Math.abs(d.x) > 0.99) cuts.push((r.rect.x0 - w.a.x) / d.x / 1000, (r.rect.x1 - w.a.x) / d.x / 1000);
+    else if (Math.abs(d.y) > 0.99) cuts.push((r.rect.y0 - w.a.y) / d.y / 1000, (r.rect.y1 - w.a.y) / d.y / 1000);
+  }
+  return cuts.sort((a, b) => a - b);
+};
+
+const piece = (layout: Layout, rooms: Room[], w: Wall, u0: number, u1: number, y0: number, y1: number, L: number, skirting: boolean, cuts: number[] = []): THREE.Group | null => {
+  const inner = cuts.filter((c) => c > u0 + 0.02 && c < u1 - 0.02);
+  if (inner.length) {
+    const g = new THREE.Group();
+    [u0, ...inner, u1].forEach((a, i, arr) => { if (i < arr.length - 1) { const p = piece(layout, rooms, w, a, arr[i + 1], y0, y1, L, skirting); if (p) g.add(p); } });
+    return g;
+  }
   const t = w.thickness / 1000;
   const ext0 = u0 <= 0.0001 ? t / 2 : 0;
   const ext1 = u1 >= L - 0.0001 ? t / 2 : 0;
   const len = u1 - u0 + ext0 + ext1;
   const h = y1 - y0;
   if (len <= 0.001 || h <= 0.001) return null;
-  const face = wallMaterial(layout, len, h);
+  // each face takes the finish of the room it faces (or its own paint)
+  const d = wallDir(w), um = ((u0 + u1) / 2) * 1000;
+  const at = { x: w.a.x + d.x * um, y: w.a.y + d.y * um };
+  const faces = ([0, 1] as const).map((side) => wallFace(layout, rooms, w, side, at));
+  const mats = faces.map((f) => (f.tiles === 'full' && !f.painted ? tileMat(len, h) : paint(f.colour, 0.85)));
   const geo = new THREE.BoxGeometry(len, h, t);
-  const m = new THREE.Mesh(geo, [face, face, capMat, face, face, face]);
+  const m = new THREE.Mesh(geo, [mats[0], mats[0], capMat, mats[0], mats[0], mats[1]]);
   m.position.set(u0 - ext0 + len / 2, y0 + h / 2, 0);
   m.castShadow = true;
   m.receiveShadow = true;
   const g = new THREE.Group();
   g.add(m);
-  if (skirting && y0 === 0 && layout.floor !== 'tiles') {
-    for (const s of [-1, 1]) {
-      const sk = mesh(new THREE.BoxGeometry(len, 0.07, 0.012), skirtingMat, [u0 - ext0 + len / 2, 0.035, s * (t / 2 + 0.006)]);
-      g.add(sk);
+  faces.forEach((f, i) => {
+    const s = i === 0 ? 1 : -1;
+    // splashback tiles to 1200 mm
+    if (f.tiles === 'half' && !f.painted && y0 < HALF_TILES) {
+      const th = Math.min(y1, HALF_TILES) - y0;
+      g.add(mesh(new THREE.BoxGeometry(len, th, 0.006), tileMat(len, th), [u0 - ext0 + len / 2, y0 + th / 2, s * (t / 2 + 0.003)]));
     }
-  }
+    if (skirting && y0 === 0 && f.tiles === 'none') g.add(mesh(new THREE.BoxGeometry(len, 0.07, 0.012), skirtingMat, [u0 - ext0 + len / 2, 0.035, s * (t / 2 + 0.006)]));
+  });
   return g;
 };
 
@@ -89,10 +113,12 @@ export const buildWalls = (layout: Layout): WallBuild[] => {
   const ceiling = layout.ceilingHeight / 1000;
   const b = layoutBounds(layout);
   const c = layoutCentre(layout);
+  const rooms = roomsOf(layout);
   const out: WallBuild[] = [];
   for (const w of layout.walls) {
     const L = wallLength(w) / 1000;
     const t = w.thickness / 1000;
+    const cuts = roomCuts(rooms, w);
     const ops = layout.openings.filter((o) => o.wallId === w.id).sort((p, q) => p.offset - q.offset);
     const make = (maxH: number) => {
       const g = new THREE.Group();
@@ -102,12 +128,12 @@ export const buildWalls = (layout: Layout): WallBuild[] => {
         const u0 = Math.max(0, (o.offset - o.width / 2) / 1000);
         const u1 = Math.min(L, (o.offset + o.width / 2) / 1000);
         const uc = o.offset / 1000;
-        add(piece(layout, w, u, u0, 0, maxH, L, true));
+        add(piece(layout, rooms, w, u, u0, 0, maxH, L, true, cuts));
         const head = (o.kind === 'window' ? o.sill + o.height : o.height) / 1000;
-        if (head < maxH) add(piece(layout, w, u0, u1, head, maxH, L, false));
+        if (head < maxH) add(piece(layout, rooms, w, u0, u1, head, maxH, L, false));
         if (o.kind === 'window') {
           const sill = o.sill / 1000;
-          add(piece(layout, w, u0, u1, 0, Math.min(sill, maxH), L, true));
+          add(piece(layout, rooms, w, u0, u1, 0, Math.min(sill, maxH), L, true));
           if (maxH > sill) {
             const top = Math.min(head, maxH);
             const fr = new THREE.Group();
@@ -146,7 +172,7 @@ export const buildWalls = (layout: Layout): WallBuild[] => {
         }
         u = Math.max(u, u1);
       }
-      add(piece(layout, w, u, L, 0, maxH, L, true));
+      add(piece(layout, rooms, w, u, L, 0, maxH, L, true, cuts));
       // orient: local x along the wall, local z = wall normal
       const d = wallDir(w);
       g.position.set(w.a.x / 1000, 0, w.a.y / 1000);
@@ -171,14 +197,25 @@ export const buildWalls = (layout: Layout): WallBuild[] => {
   return out;
 };
 
-export const floorMaterial = (layout: Layout, wM: number, dM: number) => {
+/** average colour of each floor texture, so a chosen colour can tint it */
+const FLOOR_BASE: Record<FloorFinish, [number, number, number]> = { timber: [168, 120, 78], tiles: [214, 212, 206], carpet: [150, 140, 128], vinyl: [196, 190, 178], concrete: [190, 188, 182] };
+
+export const floorMaterialOf = (floor: FloorFinish, colour: string | undefined, wM: number, dM: number) => {
   const [tex, size, rough] =
-    layout.floor === 'timber' ? [timberTexture(), 1.6, 0.55] :
-    layout.floor === 'tiles' ? [tileTexture(), 1.2, 0.35] :
-    layout.floor === 'carpet' ? [carpetTexture(), 1, 1] : [vinylTexture(), 0.8, 0.6];
+    floor === 'timber' ? [timberTexture(), 1.6, 0.55] :
+    floor === 'tiles' ? [tileTexture(), 1.2, 0.35] :
+    floor === 'carpet' ? [carpetTexture(), 1, 1] :
+    floor === 'concrete' ? [outdoorTexture('concrete'), 1, 0.8] : [vinylTexture(), 0.8, 0.6];
   const t = (tex as THREE.Texture).clone();
   t.needsUpdate = true;
   t.repeat.set(wM / (size as number), dM / (size as number));
-  return new THREE.MeshStandardMaterial({ map: t, roughness: rough as number, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ map: t, roughness: rough as number, metalness: 0 });
+  if (colour) {
+    // the texture is multiplied by the colour in linear space: scale so its average becomes the swatch
+    const c = new THREE.Color(colour), b = new THREE.Color().setRGB(...(FLOOR_BASE[floor].map((v) => v / 255) as [number, number, number]), THREE.SRGBColorSpace);
+    m.color.setRGB(c.r / b.r, c.g / b.g, c.b / b.b);
+  }
+  return m;
 };
 
+export const floorMaterial = (layout: Layout, wM: number, dM: number) => floorMaterialOf(layout.floor, undefined, wM, dM);

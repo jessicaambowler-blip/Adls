@@ -10,6 +10,8 @@ export interface Wall {
   a: Vec2;
   b: Vec2;
   thickness: number; // mm
+  /** paint on each face, overriding the room's colour: [the side the wall normal points to, the other side] */
+  paint?: [string | null, string | null];
 }
 
 export type OpeningKind = 'door' | 'sliding-door' | 'opening' | 'window';
@@ -93,7 +95,7 @@ export interface Item {
 
 export type SurfaceKind = 'lawn' | 'pavers' | 'concrete' | 'gravel' | 'decking';
 
-export type FloorFinish = 'timber' | 'tiles' | 'vinyl' | 'carpet';
+export type FloorFinish = 'timber' | 'tiles' | 'vinyl' | 'carpet' | 'concrete';
 
 export interface PlanBackground {
   dataUrl: string;
@@ -108,8 +110,20 @@ export interface PlanBackground {
   pxHeight: number;
 }
 
-/** A name written on the plan, e.g. a room name. */
-export interface PlanLabel { id: string; text: string; x: number; y: number }
+/** Finishes for one room; anything left out follows the whole house. */
+export interface RoomFinish {
+  floor?: FloorFinish;
+  /** tint of the floor (carpet, vinyl and tile colours) */
+  floorColour?: string;
+  wallColour?: string;
+  /** wall tiles: none, a splashback to 1200 mm, or floor to ceiling */
+  wallTiles?: 'none' | 'half' | 'full';
+  ceilingColour?: string;
+  lights?: 'downlights' | 'pendant' | 'batten' | 'none';
+}
+
+/** A name written on the plan, e.g. a room name. The room's finishes go with its name. */
+export interface PlanLabel { id: string; text: string; x: number; y: number; finish?: RoomFinish }
 
 export interface Layout {
   name: string;

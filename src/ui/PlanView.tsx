@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActivity } from '../activities/useActivity';
 import { surfaceInfo } from '../model/ground';
+import { roomAt, roomsOf } from '../model/finishes';
+
+const FLOOR_TINT: Record<string, string> = { timber: '#c49a6c', carpet: '#968c80', vinyl: '#c4beb2', tiles: '#d6d4ce', concrete: '#b9b7b2' };
 import { makeItem } from '../model/templates';
 import { useClearances } from '../activities/useClearances';
 import { CHAIRS, chairOf, catalogueEntry, itemBlocks, itemLabel } from '../model/catalogue';
@@ -156,6 +159,7 @@ const LiveChair = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
   const layout = useStore((s) => s.project.layouts[layoutKey]);
   const selection = useStore((s) => s.selection);
+  const rooms = useMemo(() => (layout ? roomsOf(layout) : []), [layout?.walls, layout?.labels]); // eslint-disable-line react-hooks/exhaustive-deps
   const tool = useStore((s) => s.tool);
   const labels = useStore((s) => s.showLabels);
   const gridMm = useStore((s) => s.gridMm);
@@ -364,7 +368,9 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
       set({ pendingPin: { x: Math.round(p.x), y: Math.round(p.y) }, tool: 'select', panel: 'notes' });
       return;
     }
-    set({ selection: null });
+    // clicking a room's floor picks the room (for its finishes)
+    const room = tool === 'select' ? roomAt(rooms, p) : undefined;
+    set({ selection: room ? { type: 'label', id: room.label.id } : null });
     setDrag({ kind: 'pan', start: p, vb, client: { x: e.clientX, y: e.clientY } });
   };
 
@@ -681,6 +687,15 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
         {layout.walls.length > 2 && (layout.walls.every((w, i) => dist(w.b, layout.walls[(i + 1) % layout.walls.length].a) < 2)
           ? <polygon points={pts(layout.walls.map((w) => w.a))} className={`floor-fill ${bg ? 'over-plan' : ''}`} pointerEvents="none" />
           : (() => { const b = layoutBounds({ ...layout, items: [] }); return <rect x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} className={`floor-fill ${bg ? 'over-plan' : ''}`} pointerEvents="none" />; })())}
+
+        {/* rooms with their own floor (a light tint), and the selected room */}
+        {rooms.map((r) => {
+          const sel = selection?.type === 'label' && selection.id === r.label.id;
+          const f = r.label.finish;
+          const tint = f?.floor || f?.floorColour ? f.floorColour ?? FLOOR_TINT[f.floor ?? layout.floor] : null;
+          if (!tint && !sel) return null;
+          return <rect key={r.label.id} x={r.rect.x0} y={r.rect.y0} width={r.rect.x1 - r.rect.x0} height={r.rect.y1 - r.rect.y0} className={`room-fill ${sel ? 'selected' : ''}`} style={tint ? { fill: tint } : undefined} pointerEvents="none" />;
+        })}
 
         {/* swept path */}
         {prints.map((p, i) => <polygon key={i} points={pts(p.poly)} className={`swept ${p.hit ? 'hit' : ''}`} pointerEvents="none" />)}
