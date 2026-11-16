@@ -178,10 +178,13 @@ export const buildActivity = (layout: Layout, settings: ActivitySettings, import
   const n = b.route?.narrow;
   const out = n ? { ...b, narrow: { ...n, where: describeStop(layout, n.at) } } : b;
   // rough ground the route crosses (hard going in a wheelchair)
+  // (a smooth surface or ramp laid over the lawn wins, as in the route planner)
   const rough = new Set<string>();
+  const on = (it: Item, s: Vec2) => Math.abs(itemToLocal(it, s).x) < it.w / 2 && Math.abs(itemToLocal(it, s).y) < it.d / 2;
+  const smooth = layout.items.filter((it) => it.kind === 'ramp' || (it.kind === 'surface' && !surfaceInfo(it.surface).rough));
   for (const it of layout.items) {
     if (it.kind !== 'surface' || !surfaceInfo(it.surface).rough) continue;
-    if (b.route?.samples.some((s, i) => i % 3 === 0 && Math.abs(itemToLocal(it, s).x) < it.w / 2 && Math.abs(itemToLocal(it, s).y) < it.d / 2)) rough.add(surfaceInfo(it.surface).label.toLowerCase());
+    if (b.route?.samples.some((s, i) => i % 3 === 0 && on(it, s) && !smooth.some((m) => on(m, s)))) rough.add(surfaceInfo(it.surface).label.toLowerCase());
   }
   // steps the route goes over (a wheelchair can't)
   const steps = layout.items.filter((it) => it.kind === 'step' && it.h >= 15 && b.route?.samples.some((s) => Math.abs(itemToLocal(it, s).x) < it.w / 2 && Math.abs(itemToLocal(it, s).y) < it.d / 2)).map((it) => `${it.h} mm step`);

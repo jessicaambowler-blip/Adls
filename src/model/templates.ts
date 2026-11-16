@@ -240,7 +240,8 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
   const sf = (surface: 'lawn' | 'pavers' | 'concrete' | 'gravel', x0: number, y0: number, x1: number, y1: number) =>
     makeItem('surface', (x0 + x1) / 2, (y0 + y1) / 2, 0, { surface, label: surface[0].toUpperCase() + surface.slice(1), w: x1 - x0, d: y1 - y0 });
   items.push(
-    sf('lawn', -1500, yard, 8900, 17500),
+    // (in the proposed yard the lawn stops short of the ramp and pavers rather than running under them)
+    ...(P ? [sf('lawn', -1500, yard + 1500, 8900, 17500), sf('lawn', -1500, yard, doorX - 750, yard + 1500)] : [sf('lawn', -1500, yard, 8900, 17500)]),
     sf('concrete', 8900, yard, 12900, 18100),
     makeItem('car-space', 10900, 15300),
     makeItem('car', 10300, 15300),
