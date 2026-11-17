@@ -45,6 +45,8 @@ interface UiState {
   gridMm: number;
   /** show the measuring grid on the 3D floor */
   grid3d: boolean;
+  /** realistic furniture models (where there is one) instead of the simple built-in ones */
+  realistic: boolean;
   /** furniture is being dragged in 3D (orbiting pauses) */
   dragging3d?: boolean;
   /** names and measurements on the plan, and contact tags in 3D (the selected thing always shows its own) */
@@ -118,6 +120,7 @@ export const useStore = create<State>((set, get) => ({
   highQuality: true,
   gridMm: 50,
   grid3d: true,
+  realistic: true,
   showLabels: (() => { try { return localStorage.getItem('visadls-labels') !== 'off'; } catch { return true; } })(),
   tool: 'select',
   time: 0,

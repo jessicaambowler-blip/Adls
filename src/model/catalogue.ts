@@ -25,6 +25,7 @@ export const CATALOGUE: CatalogueEntry[] = [
   { kind: 'wardrobe', label: 'Wardrobe', group: 'Bedroom', w: 1800, d: 600, h: 2100, blocks: true, wallMounted: true, description: 'Built-in wardrobe with sliding doors.' },
   { kind: 'drawers', label: 'Chest of drawers', group: 'Bedroom', w: 900, d: 450, h: 1000, blocks: true, wallMounted: true, description: 'Chest of drawers.' },
   { kind: 'armchair', label: 'Armchair', group: 'Living & kitchen', w: 800, d: 850, h: 950, blocks: true, description: 'Upholstered armchair.' },
+  { kind: 'recliner', label: 'Lift recliner', group: 'Living & kitchen', w: 870, d: 980, h: 1030, blocks: true, description: 'Power lift-assist recliner: tilts forward to help with standing up.' },
   { kind: 'sofa', label: 'Sofa (3-seat)', group: 'Living & kitchen', w: 2100, d: 900, h: 850, blocks: true, description: 'Three-seat sofa, seat height about 450 mm.' },
   { kind: 'dining-chair', label: 'Dining chair', group: 'Living & kitchen', w: 450, d: 500, h: 900, blocks: true, description: 'Dining chair without arms, seat height about 460 mm.' },
   { kind: 'tv-unit', label: 'TV unit', group: 'Living & kitchen', w: 1600, d: 420, h: 1150, blocks: true, wallMounted: true, description: 'Low TV cabinet with television.' },

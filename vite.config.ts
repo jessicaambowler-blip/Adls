@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 // (e.g. GitHub Pages, a shared drive, or a clinic intranet).
 export default defineConfig({
   plugins: [react()],
+  // furniture models (src/assets/models) are imported as files
+  assetsInclude: ['**/*.glb'],
   base: './',
   build: { chunkSizeWarningLimit: 2500 },
 });

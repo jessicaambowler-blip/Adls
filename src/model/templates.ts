@@ -224,7 +224,7 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
   if (!P) items.push(makeItem('hall-table', 8300, 5100 - 55 - 175, 180, { w: 1000 }), makeItem('plant', 10700, 4600));
   // ---- living (x 0–6000, y 5100–10000)
   items.push(makeItem('tv-unit', 55 + 210, 7500, -90), makeItem('sofa', 2600, 7500, 90));
-  items.push(P ? makeItem('armchair', 5500, 9600, 90) : makeItem('armchair', 1800, 9350, 180));
+  items.push(P ? makeItem('recliner', 5500, 9600, 90) : makeItem('armchair', 1800, 9350, 180));
   if (!P) items.push(makeItem('rug', 1800, 7500, 90, { w: 2300, d: 1600 }));
   // ---- kitchen & dining (x 6000–11000, y 5100–10000)
   items.push(

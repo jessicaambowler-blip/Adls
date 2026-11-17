@@ -368,12 +368,18 @@ const tvUnit: Builder = (w, d, h) => {
   for (const sx of [-1, 1]) g.add(mesh(cyl(0.015, 0.015, 0.05), M.blackMetal, [sx * (w / 2 - 0.06), 0.025, 0]));
   g.add(handle(-w / 4, 0.3, d / 2, 0.14));
   g.add(handle(w / 4, 0.3, d / 2, 0.14));
-  // television on a stand
-  const tvW = Math.min(1.25, w - 0.2), tvH = Math.min(tvW * 0.58, h - 0.55);
-  g.add(boxOn(0.3, 0.02, 0.18, M.blackMetal, 0, 0.5, 0, 0.004));
-  g.add(mesh(rbox(0.05, 0.07, 0.03, 0.005), M.blackMetal, [0, 0.555, -0.02]));
-  g.add(boxOn(tvW, tvH, 0.04, std('#16181b', 0.25, 0.3), 0, 0.59, -0.02, 0.006));
-  g.add(mesh(new THREE.PlaneGeometry(tvW - 0.03, tvH - 0.03), std('#1f2a36', 0.15, 0.1), [0, 0.59 + tvH / 2, 0.001]));
+  g.add(television(w, h, 0.5));
+  return g;
+};
+
+/** A television on its stand, standing on a unit `top` metres high (item size w × h). */
+export const television = (w: number, h: number, top: number) => {
+  const g = new THREE.Group();
+  const tvW = Math.min(1.25, w - 0.2), tvH = Math.min(tvW * 0.58, h - top - 0.05);
+  g.add(boxOn(0.3, 0.02, 0.18, M.blackMetal, 0, top, 0, 0.004));
+  g.add(mesh(rbox(0.05, 0.07, 0.03, 0.005), M.blackMetal, [0, top + 0.055, -0.02]));
+  g.add(boxOn(tvW, tvH, 0.04, std('#16181b', 0.25, 0.3), 0, top + 0.09, -0.02, 0.006));
+  g.add(mesh(new THREE.PlaneGeometry(tvW - 0.03, tvH - 0.03), std('#1f2a36', 0.15, 0.1), [0, top + 0.09 + tvH / 2, 0.001]));
   return g;
 };
 
@@ -547,7 +553,7 @@ const turningSpace: Builder = (w) => {
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
   'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
-  toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
+  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,
 };

@@ -16,7 +16,7 @@ export const ACTIVITY_INFO: Record<ActivityType, { label: string; needs?: string
   'toilet-transfer': { label: 'Toilet transfer', needs: ['toilet'], blurb: '' },
   basin: { label: 'Use the basin', needs: ['basin', 'vanity', 'kitchen-bench'], blurb: '' },
   cupboard: { label: 'Open a cupboard', needs: ['kitchen-bench', 'tv-unit', 'drawers', 'wardrobe'], blurb: '' },
-  'chair-transfer': { label: 'Move onto a chair or sofa', needs: ['armchair', 'sofa', 'dining-chair'], blurb: '' },
+  'chair-transfer': { label: 'Move onto a chair or sofa', needs: ['armchair', 'recliner', 'sofa', 'dining-chair'], blurb: '' },
   imported: { label: 'Imported animation', blurb: '' },
   original: { label: 'Original VisADLs recording', blurb: '' },
 };

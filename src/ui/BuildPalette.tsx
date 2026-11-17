@@ -54,7 +54,7 @@ const GROUPS: { name: string; entries: Entry[] }[] = [
   {
     name: 'Furniture', entries: [
       it('bed-adjustable', '🛏', 'Care bed'), it('bed-single', '▭', 'Single bed'), it('bed-queen', '▢', 'Queen bed'), it('bedside-table', '▫', 'Bedside'),
-      it('wardrobe', '▤', 'Wardrobe'), it('armchair', '🪑', 'Armchair'), it('sofa', '🛋', 'Sofa'), it('dining-table', '▭', 'Table'),
+      it('wardrobe', '▤', 'Wardrobe'), it('armchair', '🪑', 'Armchair'), it('recliner', '💺', 'Recliner', 'Lift recliner (power lift-assist)'), it('sofa', '🛋', 'Sofa'), it('dining-table', '▭', 'Table'),
       it('dining-chair', '⑃', 'Chair'), it('kitchen-bench', '▬', 'Bench'), it('fridge', '▯', 'Fridge'), it('mobile-hoist', '⛓', 'Hoist'), it('rug', '▤', 'Rug', 'Floor rug (castors can catch on it)'),
     ],
   },
@@ -67,6 +67,7 @@ export const BuildPalette = () => {
   const viewMode = useStore((s) => s.viewMode);
   const gridMm = useStore((s) => s.gridMm);
   const grid3d = useStore((s) => s.grid3d);
+  const realistic = useStore((s) => s.realistic);
   const [open, setOpen] = useState<Record<string, boolean>>({ Building: true, Bathroom: true, Rails: true, Structures: true, Outdoor: false, Furniture: false });
   const [dialog, setDialog] = useState<'ramp' | 'templates' | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -108,6 +109,7 @@ export const BuildPalette = () => {
           </select>
         </label>
         <label className="chk"><input type="checkbox" checked={grid3d} onChange={(e) => set({ grid3d: e.target.checked })} /> Grid in 3D</label>
+        <label className="chk" title="Realistic furniture models (Amazon Berkeley Objects, CC BY 4.0) instead of simple shapes"><input type="checkbox" checked={realistic} onChange={(e) => set({ realistic: e.target.checked })} /> Realistic furniture</label>
       </div>
       {dialog === 'ramp' && <RampDialog onClose={() => setDialog(null)} />}
       {dialog === 'templates' && <TemplatesDialog onClose={() => setDialog(null)} />}

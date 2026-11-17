@@ -1,7 +1,7 @@
 import { Grid, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -16,6 +16,7 @@ import type { ActivitySettings, Item, Layout, LayoutKey } from '../model/types';
 import { ASSETS } from './assets';
 import { SUPPORT_PERSONA, applyPose, buildAvatar, type AvatarRig } from './avatar';
 import { buildItem } from './furniture';
+import { hasRealModel, realModel } from './realModels';
 import { buildWalls, floorMaterial, floorMaterialOf } from './walls';
 import { finishOf, roomsOf } from '../model/finishes';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
@@ -340,7 +341,18 @@ const SelectionBox = ({ item }: { item: Item }) => {
 };
 
 const ItemMesh = ({ item, selected, layoutKey, base = 0 }: { item: Item; selected: boolean; layoutKey: LayoutKey; base?: number }) => {
-  const obj = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color, JSON.stringify(item.ramp)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const simple = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color, JSON.stringify(item.ramp)]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the realistic model replaces the simple one once it has loaded
+  const realistic = useStore((s) => s.realistic);
+  const [real, setReal] = useState<THREE.Object3D | null>(null);
+  useEffect(() => {
+    setReal(null);
+    if (!realistic || !hasRealModel(item.kind)) return;
+    let live = true;
+    realModel(item).then((o) => { if (live) setReal(o); });
+    return () => { live = false; };
+  }, [realistic, item.kind, item.w, item.d, item.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  const obj = real ?? simple;
   const select = useStore((s) => s.set);
   return (
     <group

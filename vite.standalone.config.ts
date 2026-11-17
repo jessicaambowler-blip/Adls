@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 // everything in a single script (no lazy-loaded chunks) and assets inlined.
 export default defineConfig({
   plugins: [react()],
+  // furniture models (src/assets/models) are imported as files
+  assetsInclude: ['**/*.glb'],
   base: './',
   publicDir: false,
   build: {

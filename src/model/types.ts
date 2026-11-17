@@ -39,6 +39,7 @@ export type ItemKind =
   | 'wardrobe'
   | 'drawers'
   | 'armchair'
+  | 'recliner'
   | 'sofa'
   | 'dining-chair'
   | 'tv-unit'
