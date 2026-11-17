@@ -14,8 +14,19 @@ const FILES = import.meta.glob('../assets/models/*.glb', { query: '?inline', imp
 const loaderFor = (kind: ItemKind) => FILES[`../assets/models/${kind}.glb`];
 export const hasRealModel = (kind: ItemKind) => !!loaderFor(kind);
 
-/** Boxy furniture is fitted to the item's height as well; seats and beds keep their proportions upright. */
-const FIT_HEIGHT = new Set<ItemKind>(['dining-table', 'desk', 'tv-unit', 'bedside-table', 'drawers', 'wardrobe', 'hall-table']);
+/**
+ * How a model takes the item's size. Width and depth always match the item; height:
+ *  box     – matches the item's height too (cabinets, tables, rails with a set size)
+ *  upright – keeps the model's proportions (seats, beds)
+ *  top     – keeps its proportions, raised so its top is at the item's height (wall basin rim, shower seat)
+ *  centre  – keeps its proportions, centred on the mounting height (straight grab rail)
+ */
+type Fit = 'box' | 'upright' | 'top' | 'centre';
+const FIT: Partial<Record<ItemKind, Fit>> = {
+  'dining-table': 'box', desk: 'box', 'tv-unit': 'box', 'bedside-table': 'box', drawers: 'box', wardrobe: 'box', 'hall-table': 'box',
+  toilet: 'box', vanity: 'box', fridge: 'box', 'grab-rail-l': 'box', 'fold-rail': 'box', 'floor-rail': 'box', 'toilet-frame': 'box',
+  basin: 'top', 'shower-seat': 'top', 'grab-rail': 'centre',
+};
 
 interface Src { scene: THREE.Object3D; size: THREE.Vector3; centre: THREE.Vector3; minY: number }
 const cache = new Map<ItemKind, Promise<Src | null>>();
@@ -60,10 +71,14 @@ export const realModel = async (it: Item): Promise<THREE.Object3D | null> => {
   const kx = w / sx, kz = d / sz;
   // (a TV unit's height includes the television: the cabinet is half a metre, the TV goes on top)
   const TV_TOP = 0.5;
-  const ky = it.kind === 'rug' ? 1 : it.kind === 'tv-unit' ? TV_TOP / src.size.y : FIT_HEIGHT.has(it.kind) ? h / src.size.y : Math.sqrt(kx * kz);
+  const fit = FIT[it.kind] ?? 'upright';
+  const ky = it.kind === 'rug' ? 1 : it.kind === 'tv-unit' ? TV_TOP / src.size.y : fit === 'box' ? h / src.size.y : Math.sqrt(kx * kz);
   const fitted = new THREE.Group();
   fitted.add(mid);
   fitted.scale.set(kx, ky, kz);
+  const tall = src.size.y * ky;
+  if (fit === 'top') fitted.position.y = h - tall;
+  if (fit === 'centre') fitted.position.y = -tall / 2;
   const out = new THREE.Group();
   out.add(fitted);
   if (it.kind === 'tv-unit') out.add(television(w, h, TV_TOP));

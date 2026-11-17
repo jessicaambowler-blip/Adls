@@ -249,6 +249,47 @@ const grabRail: Builder = (w) => {
   return G(g);
 };
 
+// drop-down rail: a back plate on the wall and a U-shaped rail reaching out into the room
+const foldRail: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  g.add(boxOn(w, h, 0.012, M.steel, 0, 0, -d / 2 + 0.006, 0.003));
+  const y = h * 0.55, x = Math.min(0.035, w / 2 - 0.01);
+  for (const s of [-1, 1]) g.add(rod([s * x, y, -d / 2 + 0.02], [s * x, y, d / 2 - 0.05], 0.014, M.steel));
+  g.add(rod([-x, y, d / 2 - 0.05], [x, y, d / 2 - 0.05], 0.014, M.steel));
+  return g;
+};
+
+// floor-to-wall rail: a post from the floor up the front, then back to the wall
+const floorRail: Builder = (_w, d, h) => {
+  const g = new THREE.Group(), zf = d / 2 - 0.03;
+  g.add(rod([0, 0, zf], [0, h, zf], 0.016, M.steel));
+  g.add(rod([0, h, zf], [0, h, -d / 2 + 0.01], 0.016, M.steel));
+  g.add(mesh(cyl(0.04, 0.04, 0.01, 20), M.steel, [0, 0.005, zf]));
+  g.add(mesh(cyl(0.035, 0.035, 0.01, 20), M.steel, [0, h, -d / 2 + 0.005], [Math.PI / 2, 0, 0]));
+  return g;
+};
+
+// free-standing toilet frame: armrests either side on four legs
+const toiletFrame: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  for (const s of [-1, 1]) {
+    const x = s * (w / 2 - 0.02);
+    for (const z of [-d / 2 + 0.03, d / 2 - 0.03]) g.add(rod([x, 0, z], [x, h, z], 0.013, M.steel));
+    g.add(rod([x, h, -d / 2 + 0.03], [x, h, d / 2 - 0.03], 0.016, M.steel));
+  }
+  g.add(rod([-w / 2 + 0.02, 0.25, -d / 2 + 0.03], [w / 2 - 0.02, 0.25, -d / 2 + 0.03], 0.012, M.steel));
+  return g;
+};
+
+// fold-down shower seat: a white seat on two brackets from a wall plate
+const showerSeat: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  g.add(boxOn(w, 0.03, d - 0.02, M.whiteLaminate, 0, h - 0.03, 0.01, 0.01));
+  g.add(boxOn(w * 0.8, 0.12, 0.02, M.steel, 0, h - 0.13, -d / 2 + 0.01, 0.003));
+  for (const s of [-1, 1]) g.add(rod([s * w * 0.35, h - 0.12, -d / 2 + 0.02], [s * w * 0.35, h - 0.035, d / 2 - 0.1], 0.01, M.steel));
+  return g;
+};
+
 const bath: Builder = (w, d, h) => {
   const g = new THREE.Group();
   const t = 0.07;
@@ -553,7 +594,7 @@ const turningSpace: Builder = (w) => {
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
   'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
-  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
+  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), 'fold-rail': foldRail, 'floor-rail': floorRail, 'toilet-frame': toiletFrame, 'shower-seat': showerSeat, toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,
 };

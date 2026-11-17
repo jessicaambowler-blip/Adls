@@ -207,7 +207,8 @@ export const lowsetHouse = (variant: 'existing' | 'proposed'): Layout => {
     items.push(
       makeItem('shower', 4255 + 640, 55 + 650, 0, { w: 1280, d: 1300 }),
       makeItem('toilet', 6745 - 350, 2100, 90),
-      makeItem('grab-rail', 6745 - 40, 1450, 90, { w: 700 }),
+      makeItem('fold-rail', 6745 - 400, 2100 - 380, 90),
+      makeItem('shower-seat', 4255 + 640, 55 + 200, 0),
       makeItem('basin', 4255 + 225, 2700, -90),
       makeItem('shower-commode', 5900, 900),
     );

@@ -25,13 +25,14 @@ const GROUPS: { name: string; entries: Entry[] }[] = [
   },
   {
     name: 'Bathroom', entries: [
-      it('toilet', '🚽', 'Toilet'), it('basin', '◡', 'Wall basin'), it('vanity', '▬', 'Vanity'), it('shower', '🚿', 'Shower'), it('bath', '🛁', 'Bath'), it('shower-commode', '♿', 'Commode'),
+      it('toilet', '🚽', 'Toilet'), it('basin', '◡', 'Wall basin'), it('vanity', '▬', 'Vanity'), it('shower', '🚿', 'Shower'), it('bath', '🛁', 'Bath'), it('shower-commode', '♿', 'Commode'), it('shower-seat', '▭', 'Shower seat', 'Fold-down shower seat'),
       { icon: '⊞', label: 'Layouts…', title: 'Bathroom layouts: accessible shower room, bath to shower, toilet rails', dialog: 'templates' },
     ],
   },
   {
     name: 'Rails', entries: [
       it('grab-rail', '━', 'Rail 900', 'Straight grab rail 900 mm at 800 mm', { w: 900 }), it('grab-rail', '─', 'Rail 600', 'Straight grab rail 600 mm at 800 mm', { w: 600 }), it('grab-rail-l', '┘', 'L rail', 'L-shaped grab rail (700 × 700) at 800 mm'),
+      it('fold-rail', '⫟', 'Drop-down', 'Drop-down rail beside the toilet'), it('floor-rail', '⌐', 'Floor rail', 'Floor-to-wall support rail'), it('toilet-frame', '⊓', 'Toilet frame', 'Free-standing toilet frame'),
     ],
   },
   {
