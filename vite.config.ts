@@ -8,5 +8,6 @@ export default defineConfig({
   // furniture models (src/assets/models) are imported as files
   assetsInclude: ['**/*.glb'],
   base: './',
-  build: { chunkSizeWarningLimit: 2500 },
+  // (models are embedded in their own small scripts, so the app is plain static files to host)
+  build: { chunkSizeWarningLimit: 2500, assetsInlineLimit: (file) => (file.endsWith('.glb') ? true : undefined) },
 });
