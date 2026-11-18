@@ -71,6 +71,15 @@ export type ItemKind =
   | 'dining-table'
   | 'hall-table'
   | 'rug'
+  | 'table-lamp'
+  | 'wall-art'
+  | 'mirror'
+  | 'ceiling-fan'
+  | 'air-con'
+  | 'curtains'
+  | 'blind'
+  | 'towel-rail'
+  | 'patio'
   | 'plant'
   | 'turning-space'
   | 'imported';
@@ -124,6 +133,8 @@ export interface RoomFinish {
   /** wall tiles: none, a splashback to 1200 mm, or floor to ceiling */
   wallTiles?: 'none' | 'half' | 'full';
   ceilingColour?: string;
+  /** a plain plasterboard ceiling, or timber boards with exposed beams */
+  ceiling?: 'plain' | 'timber';
   lights?: 'downlights' | 'pendant' | 'batten' | 'none';
 }
 

@@ -46,7 +46,7 @@ export const obstaclesOf = (layout: Layout, ignoreIds: string[] = []): Obstacle[
 class Grid {
   w: number; h: number; ox: number; oy: number;
   blocked: Uint8Array; clearance: Float32Array;
-  /** cells on rough ground (lawn, gravel) – passable but avoided where a smooth path exists */
+  /** cells on rough ground (lawn, gravel) = 1, or a step = 2 – passable but avoided where there is another way */
   rough: Uint8Array;
   constructor(layout: Layout, obstacles: Obstacle[], extra: Vec2[]) {
     const b = layoutBounds(layout);
@@ -69,6 +69,12 @@ class Grid {
         r = 1;
       }
       this.rough[j * this.w + i] = r;
+    }
+    // a real step (60 mm or more) is a barrier: the route only goes over one when there is no other way
+    const steps = layout.items.filter((it) => it.kind === 'step' && it.h >= 60);
+    for (const it of steps) for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
+      const q = itemToLocal(it, this.centre(i, j));
+      if (Math.abs(q.x) <= it.w / 2 + 100 && Math.abs(q.y) <= it.d / 2 + 100) this.rough[j * this.w + i] = 2;
     }
     for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
       const p = this.centre(i, j);
@@ -103,13 +109,13 @@ class Grid {
   isRough(p: Vec2) { const { i, j } = this.cellOf(p); return !!this.rough[j * this.w + i]; }
   clearAt(p: Vec2) { const { i, j } = this.cellOf(p); return this.clearance[j * this.w + i]; }
 
-  astar(from: Vec2, to: Vec2, radius: number): Vec2[] | null {
+  astar(from: Vec2, to: Vec2, radius: number, overSteps = true): Vec2[] | null {
     const s = this.cellOf(from), g = this.cellOf(to);
     const W = this.w, N = W * this.h;
     const sk = s.j * W + s.i, gk = g.j * W + g.i;
     // near the start and goal the chair is allowed to be close to things (parking beside a bed, etc.)
     const relax = (k: number) => Math.min(Math.hypot((k % W) - g.i, Math.floor(k / W) - g.j), Math.hypot((k % W) - s.i, Math.floor(k / W) - s.j)) * CELL < 600;
-    const ok = (k: number) => this.clearance[k] >= (relax(k) ? Math.min(radius, 150) : radius);
+    const ok = (k: number) => (overSteps || this.rough[k] !== 2) && this.clearance[k] >= (relax(k) ? Math.min(radius, 150) : radius);
     const gScore = new Float32Array(N).fill(Infinity);
     const came = new Int32Array(N).fill(-1);
     const closed = new Uint8Array(N);
@@ -134,7 +140,7 @@ class Grid {
         if (!ok(nk) && nk !== gk) continue;
         const step = (di && dj ? Math.SQRT2 : 1) * CELL;
         const penalty = Math.max(0, comfort - this.clearance[nk]) * 0.8; // prefer the middle of corridors
-        const ng = gScore[k] + step * (this.rough[nk] ? 12 : 1) + penalty * step / CELL;
+        const ng = gScore[k] + step * (this.rough[nk] === 2 ? 400 : this.rough[nk] ? 12 : 1) + penalty * step / CELL;
         if (ng < gScore[nk]) { gScore[nk] = ng; came[nk] = k; f[nk] = ng + h(nk); push(nk); }
       }
     }
@@ -280,8 +286,10 @@ export const planRoute = (layout: Layout, req: RouteRequest): RouteResult => {
 
   let status: RouteResult['status'] = 'clear';
   let path: Vec2[] | null = null;
-  for (const [r, st] of [[half + 60, 'clear'], [half + 10, 'tight'], [half - 60, 'tight']] as const) {
-    path = grid.astar(req.start, preGoal, r);
+  // a tight squeeze indoors beats going over a step (out the front and round the back, say): try every
+  // clearance without steps first, and only then allow them
+  for (const [r, st, overSteps] of [[half + 60, 'clear', false], [half + 10, 'tight', false], [half - 60, 'tight', false], [half + 60, 'clear', true], [half + 10, 'tight', true], [half - 60, 'tight', true]] as const) {
+    path = grid.astar(req.start, preGoal, r, overSteps);
     if (path) { status = st; path = alignDoors(layout, simplify(grid, path, r), req.chairLength / 2 + 250, (q) => grid.clearAt(q) >= r); break; }
   }
   if (!path) { status = 'blocked'; path = [req.start, preGoal]; }

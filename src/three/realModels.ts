@@ -26,6 +26,7 @@ const FIT: Partial<Record<ItemKind, Fit>> = {
   'dining-table': 'box', desk: 'box', 'tv-unit': 'box', 'bedside-table': 'box', drawers: 'box', wardrobe: 'box', 'hall-table': 'box',
   toilet: 'box', vanity: 'box', fridge: 'box', 'grab-rail-l': 'box', 'fold-rail': 'box', 'floor-rail': 'box', 'toilet-frame': 'box',
   basin: 'top', 'shower-seat': 'top', 'grab-rail': 'centre',
+  'wall-art': 'box', mirror: 'box', 'air-con': 'box', 'ceiling-fan': 'top',
 };
 
 interface Src { scene: THREE.Object3D; size: THREE.Vector3; centre: THREE.Vector3; minY: number }

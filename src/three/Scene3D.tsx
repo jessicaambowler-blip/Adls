@@ -147,11 +147,17 @@ const RoomFinishes = ({ layout }: { layout: Layout }) => {
     const { x0, x1, y0, y1 } = r.rect;
     const w = (x1 - x0) / 1000, d = (y1 - y0) / 1000, cx = (x0 + x1) / 2000, cz = (y0 + y1) / 2000;
     const floor = r.own?.floor || r.own?.floorColour ? floorMaterialOf(r.f.floor, r.f.floorColour, w, d) : null;
-    const ceil = r.own?.ceilingColour ? new THREE.MeshStandardMaterial({ color: r.f.ceilingColour, roughness: 0.95 }) : null;
-    return { key: r.label.id, w, d, cx, cz, floor, ceil, lights: r.f.lights, lift: rank(r) * 0.0006 };
+    const timber = r.f.ceiling === 'timber';
+    // timber-lined ceiling: stained boards (the floorboard texture, tinted) with dark exposed beams
+    const ceil = timber ? floorMaterialOf('timber', '#7a4a2c', w, d) : r.own?.ceilingColour ? new THREE.MeshStandardMaterial({ color: r.f.ceilingColour, roughness: 0.95 }) : null;
+    const along = w >= d; // beams span the shorter way, about every 1.2 m
+    const span = along ? w : d, n = Math.max(1, Math.round(span / 1.2) - 1);
+    const beams = timber ? Array.from({ length: n }, (_, i) => -span / 2 + (span * (i + 1)) / (n + 1)) : [];
+    return { key: r.label.id, w, d, cx, cz, floor, ceil, beams, along, lights: r.f.lights, lift: rank(r) * 0.0006 };
   }), [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => parts.forEach((p) => { p.floor?.map?.dispose(); p.floor?.dispose(); p.ceil?.dispose(); }), [parts]);
   const glow = useMemo(() => new THREE.MeshStandardMaterial({ color: '#fffaf0', emissive: '#fff4d6', emissiveIntensity: 1.2 }), []);
+  const beamMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#3a2417', roughness: 0.7 }), []);
   const trim = useMemo(() => new THREE.MeshStandardMaterial({ color: '#e8e6e1', roughness: 0.4, metalness: 0.2 }), []);
   return (
     <group>
@@ -170,6 +176,11 @@ const RoomFinishes = ({ layout }: { layout: Layout }) => {
         </group>
       ))}
       <group ref={fittings}>
+        {parts.map((p) => p.beams.map((o, i) => (
+          <mesh key={`${p.key}b${i}`} position={[p.cx + (p.along ? o : 0), H - 0.11, p.cz + (p.along ? 0 : o)]} material={beamMat} castShadow>
+            <boxGeometry args={p.along ? [0.09, 0.2, p.d] : [p.w, 0.2, 0.09]} />
+          </mesh>
+        )))}
         {parts.map((p) => {
           if (p.lights === 'pendant') return (
             <group key={p.key} position={[p.cx, H, p.cz]}>
@@ -359,7 +370,10 @@ const SelectionBox = ({ item }: { item: Item }) => {
   return <Line points={pts} color="#ff8a00" lineWidth={3} />;
 };
 
-const ItemMesh = ({ item, selected, layoutKey, base = 0 }: { item: Item; selected: boolean; layoutKey: LayoutKey; base?: number }) => {
+/** Things overhead (ceiling fans, a patio roof) hide when looking down from above, like the ceilings. */
+const OVERHEAD: Partial<Record<Item['kind'], 'all' | 'marked'>> = { 'ceiling-fan': 'all', patio: 'marked' };
+
+const ItemMesh = ({ item, selected, layoutKey, base = 0, ceiling = 2400 }: { item: Item; selected: boolean; layoutKey: LayoutKey; base?: number; ceiling?: number }) => {
   const simple = useMemo(() => buildItem(item), [item.kind, item.w, item.d, item.h, item.color, JSON.stringify(item.ramp)]); // eslint-disable-line react-hooks/exhaustive-deps
   // the realistic model replaces the simple one once it has loaded
   const realistic = useStore((s) => s.realistic);
@@ -373,6 +387,18 @@ const ItemMesh = ({ item, selected, layoutKey, base = 0 }: { item: Item; selecte
   }, [realistic, item.kind, item.w, item.d, item.h]); // eslint-disable-line react-hooks/exhaustive-deps
   const obj = real ?? simple;
   const select = useStore((s) => s.set);
+  const over = OVERHEAD[item.kind];
+  const overhead = useMemo(() => {
+    if (!over) return [];
+    if (over === 'all') return [obj];
+    const out: THREE.Object3D[] = [];
+    obj.traverse((o) => { if (o.userData.overhead) out.push(o); });
+    return out;
+  }, [obj, over]);
+  const topOf = (item.kind === 'patio' ? item.h : ceiling) / 1000;
+  useFrame(({ camera }) => { if (overhead.length) { const v = camera.position.y < base / 1000 + topOf + 0.05; overhead.forEach((o) => { o.visible = v; }); } });
+  // a ceiling fan hangs from the ceiling, whatever the ceiling height
+  const elevation = item.kind === 'ceiling-fan' ? ceiling - item.h : item.elevation ?? 0;
   return (
     <group
       position={[item.x / 1000, base / 1000, item.y / 1000]}
@@ -386,7 +412,7 @@ const ItemMesh = ({ item, selected, layoutKey, base = 0 }: { item: Item; selecte
         startDrag3d(layoutKey, item, e.point);
       }}
     >
-      <group position-y={(item.elevation ?? 0) / 1000}>
+      <group position-y={elevation / 1000}>
         <primitive object={obj} />
       </group>
       {selected && <SelectionBox item={item} />}
@@ -443,7 +469,7 @@ const Items = ({ layout, settings, layoutKey }: { layout: Layout; settings: Acti
         it.kind === 'imported' ? (
           <ImportedItem key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} settings={settings} />
         ) : (
-          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} layoutKey={layoutKey} base={floorAt(layout, it)} />
+          <ItemMesh key={it.id} item={it} selected={sel?.type === 'item' && sel.id === it.id} layoutKey={layoutKey} base={floorAt(layout, it)} ceiling={layout.ceilingHeight} />
         ),
       )}
     </>

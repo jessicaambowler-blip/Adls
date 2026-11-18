@@ -579,6 +579,92 @@ const plant: Builder = (w, _d, h) => {
   return g;
 };
 
+// ---- decor (simple stand-ins; realistic models replace most of these)
+const tableLamp: Builder = (w, _d, h) => {
+  const g = new THREE.Group();
+  g.add(mesh(lathe([[0.001, 0], [w * 0.22, 0], [w * 0.28, h * 0.25], [w * 0.12, h * 0.5], [0.015, h * 0.55]]), std('#b9b3a8', 0.4)));
+  const shade = mesh(new THREE.CylinderGeometry(w * 0.38, w * 0.48, h * 0.42, 32, 1, true), new THREE.MeshStandardMaterial({ color: '#f1ebdf', roughness: 0.9, side: THREE.DoubleSide, emissive: '#3a3020' }), [0, h * 0.75, 0]);
+  g.add(shade);
+  return g;
+};
+
+const wallArt: Builder = (w, d, h) => {
+  const g = G(boxOn(w, h, d, M.walnut, 0, 0, 0, 0.004));
+  g.add(boxOn(w - 0.08, h - 0.08, 0.004, std('#e9e4da', 0.9), 0, 0.04, d / 2, 0));
+  g.add(boxOn(w - 0.2, h - 0.2, 0.004, std('#7d97a3', 0.8), 0, 0.1, d / 2 + 0.002, 0));
+  return g;
+};
+
+const mirror: Builder = (w, d, h) => G(boxOn(w, h, d, M.walnut, 0, 0, 0, 0.004), boxOn(w - 0.06, h - 0.06, 0.004, new THREE.MeshStandardMaterial({ color: '#c7d0d4', roughness: 0.05, metalness: 1 }), 0, 0.03, d / 2, 0));
+
+const ceilingFan: Builder = (w, _d, h) => {
+  const g = new THREE.Group();
+  g.add(rod([0, h, 0], [0, 0.12, 0], 0.012, M.chrome));
+  g.add(mesh(cyl(0.09, 0.08, 0.1, 24), M.chrome, [0, 0.07, 0]));
+  for (let i = 0; i < 3; i++) {
+    const b = mesh(new THREE.BoxGeometry(w / 2 - 0.1, 0.008, 0.12), std('#f2f2f0', 0.5), [0, 0.07, 0]);
+    b.geometry.translate((w / 2 - 0.1) / 2 + 0.08, 0, 0);
+    b.rotation.y = (i * Math.PI * 2) / 3;
+    g.add(b);
+  }
+  return g;
+};
+
+const airCon: Builder = (w, d, h) => {
+  const g = G(mesh(rbox(w, h, d, 0.04), std('#f4f4f2', 0.35), [0, h / 2, 0]));
+  g.add(boxOn(w - 0.08, 0.02, 0.01, std('#d8d8d6', 0.5), 0, 0.05, d / 2, 0));
+  return g;
+};
+
+const curtains: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  g.add(rod([-w / 2, h - 0.03, 0], [w / 2, h - 0.03, 0], 0.012, M.chrome));
+  const cloth = std('#ece6da', 0.95);
+  // two gathered panels drawn back to each side (folds as a row of thin rounded boxes)
+  for (const s of [-1, 1]) {
+    const pw = Math.min(0.45, w * 0.22);
+    for (let i = 0; i < 6; i++) {
+      const x = s * (w / 2 - pw / 2) + (i - 2.5) * (pw / 6);
+      g.add(mesh(rbox(pw / 6 + 0.01, h - 0.08, 0.04, 0.015), cloth, [x, (h - 0.08) / 2 + 0.02, (i % 2 ? 0.015 : -0.015) + d / 2 - 0.05]));
+    }
+  }
+  return g;
+};
+
+const blind: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  g.add(mesh(cyl(0.03, 0.03, w, 16), std('#ddd8cf', 0.6), [0, h - 0.03, 0], [0, 0, Math.PI / 2]));
+  const down = h * 0.55;
+  g.add(boxOn(w - 0.02, down, 0.004, std('#8e8279', 0.95), 0, h - 0.04 - down, d / 2 - 0.01, 0));
+  g.add(boxOn(w - 0.02, 0.025, 0.012, std('#cfc9bf', 0.5), 0, h - 0.06 - down, d / 2 - 0.01, 0));
+  return g;
+};
+
+const towelRail: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  g.add(rod([-w / 2, h / 2, d / 2 - 0.01], [w / 2, h / 2, d / 2 - 0.01], 0.01, M.chrome));
+  for (const s of [-1, 1]) g.add(rod([s * w / 2, h / 2, -d / 2], [s * w / 2, h / 2, d / 2 - 0.01], 0.012, M.chrome));
+  g.add(boxOn(w * 0.7, 0.45, 0.025, std('#6f8fa0', 0.95), 0, h / 2 - 0.44, d / 2 - 0.01, 0.01));
+  return g;
+};
+
+// covered patio: a flat roof on posts
+const patio: Builder = (w, d, h) => {
+  const g = new THREE.Group();
+  const post = std('#e8e4dc', 0.6);
+  const nx = Math.max(2, Math.round(w / 3) + 1);
+  for (let i = 0; i < nx; i++) {
+    const x = -w / 2 + 0.05 + (i * (w - 0.1)) / (nx - 1);
+    g.add(boxOn(0.09, h, 0.09, post, x, 0, d / 2 - 0.05, 0.004));
+  }
+  g.add(boxOn(w, 0.12, 0.1, post, 0, h - 0.12, d / 2 - 0.05, 0.004));
+  const roof = new THREE.MeshStandardMaterial({ color: '#d9dcd8', roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide });
+  const r = mesh(new THREE.BoxGeometry(w + 0.1, 0.02, d + 0.05), roof, [0, h + 0.02, 0]);
+  r.userData.overhead = true;
+  g.add(r);
+  return g;
+};
+
 const turningSpace: Builder = (w) => {
   const g = new THREE.Group();
   const ring = new THREE.Mesh(new THREE.RingGeometry(w / 2 - 0.025, w / 2, 96), new THREE.MeshBasicMaterial({ color: '#1f7a5a', transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
@@ -594,7 +680,7 @@ const turningSpace: Builder = (w) => {
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
   'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
-  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), 'fold-rail': foldRail, 'floor-rail': floorRail, 'toilet-frame': toiletFrame, 'shower-seat': showerSeat, toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
+  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), 'fold-rail': foldRail, 'table-lamp': tableLamp, 'wall-art': wallArt, mirror, 'ceiling-fan': ceilingFan, 'air-con': airCon, curtains, blind, 'towel-rail': towelRail, patio, 'floor-rail': floorRail, 'toilet-frame': toiletFrame, 'shower-seat': showerSeat, toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,
 };

@@ -49,7 +49,14 @@ const GROUPS: { name: string; entries: Entry[] }[] = [
       it('surface', '⁘', 'Gravel', 'Gravel – drag out the area on the plan', { surface: 'gravel', label: 'Gravel', w: 1200, d: 3000 }),
       it('surface', '☰', 'Decking', 'Decking – drag out the area on the plan', { surface: 'decking', label: 'Decking', w: 3000, d: 2400 }),
       it('fence', '┼', 'Fence'), it('gate', '⌐', 'Gate'), it('garden-bed', '✿', 'Garden'), it('tree', '🌳', 'Tree'),
-      it('car', '🚗', 'Car'), it('car-space', '🅿', 'Car space'),
+      it('car', '🚗', 'Car'), it('car-space', '🅿', 'Car space'), it('patio', '⌂', 'Patio', 'Covered patio (roof on posts)'),
+    ],
+  },
+  {
+    name: 'Decor', entries: [
+      it('plant', '🪴', 'Plant'), it('table-lamp', '💡', 'Lamp', 'Table lamp (on a side table)'), it('wall-art', '🖼', 'Picture'), it('mirror', '▯', 'Mirror'),
+      it('curtains', '⫴', 'Curtains'), it('blind', '▤', 'Blind', 'Roller blind'), it('ceiling-fan', '✣', 'Fan', 'Ceiling fan'), it('air-con', '❄', 'Air con', 'Split-system air conditioner'),
+      it('towel-rail', '═', 'Towel rail'),
     ],
   },
   {
@@ -69,7 +76,7 @@ export const BuildPalette = () => {
   const gridMm = useStore((s) => s.gridMm);
   const grid3d = useStore((s) => s.grid3d);
   const realistic = useStore((s) => s.realistic);
-  const [open, setOpen] = useState<Record<string, boolean>>({ Building: true, Bathroom: true, Rails: true, Structures: true, Outdoor: false, Furniture: false });
+  const [open, setOpen] = useState<Record<string, boolean>>({ Building: true, Bathroom: true, Rails: true, Structures: true, Outdoor: false, Decor: false, Furniture: false });
   const [dialog, setDialog] = useState<'ramp' | 'templates' | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 

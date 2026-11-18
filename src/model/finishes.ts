@@ -74,7 +74,7 @@ export const roomAt = (rooms: Room[], p: Vec2): Room | undefined => {
   return best;
 };
 
-export interface Finish { floor: FloorFinish; floorColour?: string; wallColour: string; wallTiles: 'none' | 'half' | 'full'; ceilingColour: string; lights: NonNullable<RoomFinish['lights']> }
+export interface Finish { floor: FloorFinish; floorColour?: string; wallColour: string; wallTiles: 'none' | 'half' | 'full'; ceilingColour: string; ceiling: 'plain' | 'timber'; lights: NonNullable<RoomFinish['lights']> }
 
 /** A room's finishes with the house defaults filled in. */
 export const finishOf = (l: Layout, f?: RoomFinish): Finish => {
@@ -86,6 +86,7 @@ export const finishOf = (l: Layout, f?: RoomFinish): Finish => {
     // tiled floors have tiled walls unless the room says otherwise (wet areas)
     wallTiles: f?.wallTiles ?? (floor === 'tiles' ? 'full' : 'none'),
     ceilingColour: f?.ceilingColour ?? '#f6f5f2',
+    ceiling: f?.ceiling ?? 'plain',
     lights: f?.lights ?? 'downlights',
   };
 };

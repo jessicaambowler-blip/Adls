@@ -275,10 +275,12 @@ const LabelInspector = ({ id }: { id: string }) => {
           <Swatches label="Walls" colours={WALL_COLOURS} value={own.wallColour} onChange={(wallColour) => fin({ wallColour })} />
           <div className="row-label">Wall tiles</div>
           <Segmented label="Wall tiles" value={f.wallTiles} options={[{ value: 'none', label: 'None' }, { value: 'half', label: 'To 1.2 m' }, { value: 'full', label: 'Full height' }]} onChange={(wallTiles) => fin({ wallTiles })} />
-          <Swatches label="Ceiling" colours={CEILING_COLOURS} value={own.ceilingColour} onChange={(ceilingColour) => fin({ ceilingColour })} auto="Standard white" />
+          <div className="row-label">Ceiling</div>
+          <Segmented label="Ceiling" value={f.ceiling} options={[{ value: 'plain', label: 'Plain' }, { value: 'timber', label: 'Timber & beams' }]} onChange={(ceiling) => fin({ ceiling: ceiling === 'plain' ? undefined : ceiling })} />
+          {f.ceiling === 'plain' && <Swatches label="Ceiling colour" colours={CEILING_COLOURS} value={own.ceilingColour} onChange={(ceilingColour) => fin({ ceilingColour })} auto="Standard white" />}
           <div className="row-label">Lights</div>
           <Segmented label="Lights" value={f.lights} options={LIGHT_OPTIONS} onChange={(lights) => fin({ lights })} />
-          {lb.finish && <button className="linklike" onClick={() => fin({ floor: undefined, floorColour: undefined, wallColour: undefined, wallTiles: undefined, ceilingColour: undefined, lights: undefined })}>Same as the rest of the house</button>}
+          {lb.finish && <button className="linklike" onClick={() => fin({ floor: undefined, floorColour: undefined, wallColour: undefined, wallTiles: undefined, ceilingColour: undefined, ceiling: undefined, lights: undefined })}>Same as the rest of the house</button>}
           <p className="muted">Paint one wall differently: click the wall.</p>
         </>
       ) : <p className="muted">Move the name inside a room to set its floor, walls and ceiling.</p>}

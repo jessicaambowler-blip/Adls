@@ -3,7 +3,7 @@ import type { ItemKind } from './types';
 export interface CatalogueEntry {
   kind: ItemKind;
   label: string;
-  group: 'Bedroom' | 'Bathroom' | 'Living & kitchen' | 'Equipment' | 'Planning aids' | 'Outdoor';
+  group: 'Bedroom' | 'Bathroom' | 'Living & kitchen' | 'Decor' | 'Equipment' | 'Planning aids' | 'Outdoor';
   w: number;
   d: number;
   h: number;
@@ -58,6 +58,15 @@ export const CATALOGUE: CatalogueEntry[] = [
   { kind: 'hall-table', label: 'Hall table', group: 'Living & kitchen', w: 1000, d: 350, h: 800, blocks: true, wallMounted: true, description: 'Narrow hall / console table.' },
   { kind: 'rug', label: 'Rug', group: 'Living & kitchen', w: 1600, d: 2300, h: 10, blocks: false, description: 'Floor rug (can catch castors).' },
   { kind: 'plant', label: 'Pot plant', group: 'Living & kitchen', w: 400, d: 400, h: 1100, blocks: true, description: 'Indoor plant.' },
+  { kind: 'table-lamp', label: 'Table lamp', group: 'Decor', w: 330, d: 330, h: 520, elevation: 550, blocks: false, description: 'Lamp on a bedside or side table (set its height to the table top).' },
+  { kind: 'wall-art', label: 'Picture', group: 'Decor', w: 800, d: 30, h: 1100, elevation: 1000, blocks: false, wallMounted: true, description: 'Framed picture on the wall.' },
+  { kind: 'mirror', label: 'Mirror', group: 'Decor', w: 600, d: 30, h: 800, elevation: 1050, blocks: false, wallMounted: true, description: 'Wall mirror.' },
+  { kind: 'ceiling-fan', label: 'Ceiling fan', group: 'Decor', w: 1200, d: 1200, h: 350, blocks: false, description: 'Ceiling fan (hangs from the ceiling).' },
+  { kind: 'air-con', label: 'Air conditioner', group: 'Decor', w: 900, d: 250, h: 300, elevation: 2000, blocks: false, wallMounted: true, description: 'Split-system air conditioner high on the wall.' },
+  { kind: 'curtains', label: 'Curtains', group: 'Decor', w: 1800, d: 120, h: 2150, blocks: false, wallMounted: true, description: 'Curtains on a rod; set the width to the window plus a little each side.' },
+  { kind: 'blind', label: 'Roller blind', group: 'Decor', w: 1500, d: 60, h: 1250, elevation: 950, blocks: false, wallMounted: true, description: 'Roller blind over a window, partly down.' },
+  { kind: 'towel-rail', label: 'Towel rail', group: 'Bathroom', w: 600, d: 90, h: 60, elevation: 1100, blocks: false, wallMounted: true, description: 'Towel rail with a towel.' },
+  { kind: 'patio', label: 'Covered patio', group: 'Outdoor', w: 4000, d: 3000, h: 2600, blocks: false, description: 'Patio roof on posts (the posts do not block the wheelchair here).' },
   { kind: 'turning-space', label: 'Turning space marker', group: 'Planning aids', w: 1500, d: 1500, h: 5, blocks: false, description: 'Circle marking a turning space for discussion. Diameter is editable.' },
 ];
 
