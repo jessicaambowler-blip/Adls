@@ -468,7 +468,7 @@ const ramp: Builder = (w, d, h, it) => {
   return g;
 };
 
-const step: Builder = (w, d, h) => G(boxOn(w, h, d, concrete(), 0, 0, 0, 0.004));
+const step: Builder = (w, d, h) => G(boxOn(w, h, d, h < 0.06 ? M.aluminium : concrete(), 0, 0, 0, Math.min(0.004, h / 3)));
 
 const surface: Builder = (w, d, _h, it) => {
   const kind = it.surface ?? 'lawn';

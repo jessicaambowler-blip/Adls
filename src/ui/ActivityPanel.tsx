@@ -31,6 +31,7 @@ export const RouteSummary = ({ built, layoutKey }: { built: BuiltActivity; layou
       {r.status === 'tight' && <>Tight{r.minSideClearance > 0 && r.minSideClearance < 999 && <> – about {r.minSideClearance} mm each side</>}.{contacts.length > 0 && <> Bumps: {contacts.join(', ')}.</>}</>}
       {r.status === 'blocked' && <>No route for a {C.width} mm chair.</>}
       {built.narrow && <div className="problem">Too narrow at {built.narrow.where}.</div>}
+      {built.lips && <div className="problem soft">Goes over a raised threshold – {built.lips.join(', ')}. Castors can catch; a threshold ramp would smooth it out.</div>}
       {built.steps && <div className="problem">Goes over a {built.steps.join(' and a ')} – not possible in a wheelchair.</div>}
       {built.rugs && <div className="problem soft">Crosses {built.rugs > 1 ? `${built.rugs} rugs` : 'a rug'} – castors can catch on the edge.</div>}
       {built.rough && <div className="problem soft">Crosses {built.rough.join(' and ')} – hard going in a wheelchair.</div>}
