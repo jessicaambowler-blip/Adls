@@ -239,7 +239,7 @@ export const Summary = () => {
             VisADLs motion capture) show how one person did an activity on one occasion; other movements are demonstrations made by the
             app. Neither represents how every person with a spinal cord injury moves.
           </p>
-          <p className="caveat">3D models (CC BY 4.0, resized and compressed): Amazon Berkeley Objects (© Amazon.com); termagroup, HippoStance, cenkahmett, Brandon Westlake and Glowbox 3D via Sketchfab/Objaverse; NVIDIA Isaac Sim hospital assets.</p>
+          <p className="caveat">3D models (CC BY 4.0, resized and compressed): Amazon Berkeley Objects (© Amazon.com); termagroup, HippoStance, cenkahmett, Brandon Westlake, Glowbox 3D, Pandurus, maxsbond.work and Ankush Gupta via Sketchfab/Objaverse; NVIDIA Isaac Sim hospital assets.</p>
         </article>
       </div>
     </div>
@@ -265,7 +265,7 @@ export const Help = () => {
         {HOSTED && <p className="muted">You are using the online preview: your work is kept in this browser only. To keep a copy, use the installed version, which can save project files.</p>}
         <p className="caveat">This is a research prototype for discussion. It does not check compliance with standards and is not a substitute for clinical reasoning or on-site measurement. Persona 2's driving and hoist transfer are recorded VisADLs motion capture; other movements are demonstrations made by the app.</p>
         <h3>Credits</h3>
-        <p className="muted">Realistic models, all licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> and resized and compressed for this app: furniture from the Amazon Berkeley Objects dataset (© Amazon.com); grab rails, drop-down rail, floor rail, toilet frame and shower seat by termagroup; toilet by HippoStance; wall basin by cenkahmett; vanity by Brandon Westlake; fridge by Glowbox 3D (via Sketchfab and Objaverse); care bed from NVIDIA's Isaac Sim hospital assets. Switch them off with “Realistic furniture” in the build tools.</p>
+        <p className="muted">Realistic models, all licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> and resized and compressed for this app: furniture from the Amazon Berkeley Objects dataset (© Amazon.com); grab rails, drop-down rail, floor rail, toilet frame and shower seat by termagroup; toilet by HippoStance; wall basin by cenkahmett; vanity by Brandon Westlake; fridge by Glowbox 3D; plant by Pandurus; air conditioner by maxsbond.work; ceiling fan by Ankush Gupta (via Sketchfab and Objaverse); care bed from NVIDIA's Isaac Sim hospital assets. Switch them off with “Realistic furniture” in the build tools.</p>
         <div className="modal-actions"><button className="primary" onClick={() => set({ showHelp: false })}>Got it</button></div>
       </div>
     </div>

@@ -24,6 +24,9 @@ simplified; models are scaled to each item's size in the app.
 | bed-single.glb | B071H75K71 | Movian Aveyron Single Bed Frame, Grey |
 | hall-table.glb | B07DB968V1 | Ravenna Home Amber Console Table |
 | rug.glb | B07B4ZM2J8 | Rivet Striated Jute Area Rug |
+| table-lamp.glb | B073751DMM | Stone & Beam Textured Teardrop Table Lamp |
+| wall-art.glb | B075YL5LCL | Stone & Beam Rustic Whale Species Print |
+| mirror.glb | B07RRR3RS1 | Amazon Basics Rectangular Wall Mirror, Walnut |
 
 ## Bathroom and support equipment (Objaverse / Sketchfab, CC BY 4.0)
 
@@ -43,6 +46,9 @@ meshes compressed (meshopt); fitted to each item's size in the app.
 | basin.glb | Handicapped Wash Basin | cenkahmett | https://sketchfab.com/3d-models/451747c93dae4c26b6c3d121c6d4e58f |
 | vanity.glb | Marble Bathroom Sink | Brandon Westlake | https://sketchfab.com/3d-models/0c183eb640234ab38bd64980458d65e3 |
 | fridge.glb | Refrigerator – Grey Polished Metal | Glowbox 3D | https://sketchfab.com/3d-models/2071bda681b642218b6829b82e4fd93b |
+| plant.glb | Potted Monstera Deliciosa Mid-Century | Pandurus | https://sketchfab.com/3d-models/1ab9bf841df04c07b1819be596327629 |
+| air-con.glb | Air condition Daikin | maxsbond.work | https://sketchfab.com/3d-models/26b0f7c8472741f4b85b889cf3b1d870 |
+| ceiling-fan.glb | Ceiling Fan | Ankush Gupta | https://sketchfab.com/3d-models/eb6f660bf970485ca9b22ddc12b565b2 |
 
 ## Care bed (NVIDIA Isaac Sim hospital environment, CC BY 4.0)
 
