@@ -259,7 +259,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     e.stopPropagation();
     svgRef.current?.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (d && d.kind !== 'pan') checkpoint();
+    if (d && d.kind !== 'pan') { checkpoint(); set({ dragging: true }); }
     setDrag(d);
   };
 
@@ -526,6 +526,7 @@ export const PlanView = ({ layoutKey }: { layoutKey: LayoutKey }) => {
     if (drag?.kind === 'wall' || drag?.kind === 'corner') updateLayout((l) => tidyWalls(l), { commit: false, key: layoutKey });
     if (pointers.current.size < 2) pinch.current = null;
     setDrag(null);
+    if (useStore.getState().dragging) set({ dragging: false });
   };
 
   useEffect(() => {

@@ -24,7 +24,9 @@ const tileMat = (len: number, h: number) => {
   const t = wallTileTexture().clone();
   t.needsUpdate = true;
   t.repeat.set(len / 1.2, h / 1.2);
-  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 });
+  const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 });
+  m.userData.own = true;
+  return m;
 };
 
 /** height of a tiled splashback */

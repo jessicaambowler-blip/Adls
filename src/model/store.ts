@@ -49,6 +49,8 @@ interface UiState {
   realistic: boolean;
   /** furniture is being dragged in 3D (orbiting pauses) */
   dragging3d?: boolean;
+  /** something is being dragged on the plan (routes and clearances wait until it is let go) */
+  dragging?: boolean;
   /** names and measurements on the plan, and contact tags in 3D (the selected thing always shows its own) */
   showLabels: boolean;
   tool: Tool;
@@ -137,7 +139,8 @@ export const useStore = create<State>((set, get) => ({
   updateLayout: (fn, opts = {}) =>
     set((s) => {
       const key = opts.key ?? s.activeLayout;
-      const project = clone(s.project);
+      // only the edited layout is copied: the other keeps its identity, so nothing derived from it is redone
+      const project = { ...s.project, layouts: { ...s.project.layouts, [key]: clone(s.project.layouts[key]) } };
       fn(project.layouts[key]);
       const past = opts.commit === false ? s.past : [...s.past.slice(-60), s.project];
       return { project, past, future: opts.commit === false ? s.future : [] };

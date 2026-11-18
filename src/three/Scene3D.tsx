@@ -88,7 +88,10 @@ const Lights = ({ layout, hq }: { layout: Layout; hq: boolean }) => {
 // ---------------------------------------------------------------- building
 
 const Walls = ({ layout }: { layout: Layout }) => {
-  const builds = useMemo(() => buildWalls(layout), [layout.walls, layout.openings, layout.ceilingHeight, layout.wallColor, layout.floor, layout.labels]); // eslint-disable-line react-hooks/exhaustive-deps
+  // rebuilt only when the building itself changes (not when furniture moves), and the old meshes freed
+  const sig = JSON.stringify([layout.walls, layout.openings, layout.ceilingHeight, layout.wallColor, layout.floor, layout.labels]);
+  const builds = useMemo(() => buildWalls(layout), [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => builds.forEach((b) => { disposeTree(b.full); disposeTree(b.low); }), [builds]);
   const group = useRef<THREE.Group>(null);
   const tmp = useMemo(() => new THREE.Vector3(), []);
   useFrame(({ camera }) => {
@@ -117,9 +120,24 @@ const Walls = ({ layout }: { layout: Layout }) => {
   );
 };
 
+/** Free a rebuilt object's geometry, and any materials and textures made just for it. */
+const disposeTree = (o: THREE.Object3D) => o.traverse((x) => {
+  const m = x as THREE.Mesh;
+  if (!m.isMesh) return;
+  m.geometry?.dispose();
+  for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+    if (!mat?.userData?.own) continue;
+    (mat as THREE.MeshStandardMaterial).map?.dispose();
+    mat.dispose();
+  }
+});
+
 /** Each named room's own floor, ceiling colour and light fittings (fittings only from below the ceiling). */
 const RoomFinishes = ({ layout }: { layout: Layout }) => {
-  const rooms = useMemo(() => roomsOf(layout).map((r) => ({ ...r, f: finishOf(layout, r.label.finish), own: r.label.finish })), [layout.walls, layout.labels, layout.floor, layout.wallColor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const roomList = useMemo(() => roomsOf(layout).map((r) => ({ ...r, f: finishOf(layout, r.label.finish), own: r.label.finish })), [layout.walls, layout.labels, layout.floor, layout.wallColor]); // eslint-disable-line react-hooks/exhaustive-deps
+  // only rebuild the floors when a room's size or finish actually changes (not on every edit)
+  const roomSig = JSON.stringify(roomList.map((r) => [r.label.id, r.rect, r.f, !!r.own?.floor || !!r.own?.floorColour, !!r.own?.ceilingColour]));
+  const rooms = useMemo(() => roomList, [roomSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const fittings = useRef<THREE.Group>(null);
   const H = layout.ceilingHeight / 1000;
   useFrame(({ camera }) => { if (fittings.current) fittings.current.visible = camera.position.y < H; });
@@ -132,6 +150,7 @@ const RoomFinishes = ({ layout }: { layout: Layout }) => {
     const ceil = r.own?.ceilingColour ? new THREE.MeshStandardMaterial({ color: r.f.ceilingColour, roughness: 0.95 }) : null;
     return { key: r.label.id, w, d, cx, cz, floor, ceil, lights: r.f.lights, lift: rank(r) * 0.0006 };
   }), [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => parts.forEach((p) => { p.floor?.map?.dispose(); p.floor?.dispose(); p.ceil?.dispose(); }), [parts]);
   const glow = useMemo(() => new THREE.MeshStandardMaterial({ color: '#fffaf0', emissive: '#fff4d6', emissiveIntensity: 1.2 }), []);
   const trim = useMemo(() => new THREE.MeshStandardMaterial({ color: '#e8e6e1', roughness: 0.4, metalness: 0.2 }), []);
   return (
@@ -388,10 +407,10 @@ const ImportedItem = ({ item, selected, settings }: { item: Item; selected: bool
     return { obj: o, mixer: mx, action: ac };
   }, [asset, assetVersion]);
   const driven = settings.type === 'imported' && (settings.importedItemId ? settings.importedItemId === item.id : true);
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     if (!mixer || !action) return;
     if (driven) mixer.setTime(useStore.getState().time);
-    else mixer.update(dt);
+    else { mixer.update(dt); state.invalidate(); }
   });
   const sc = item.modelScale ?? 1;
   return (
@@ -594,6 +613,22 @@ const Pins = ({ layoutKey }: { layoutKey: LayoutKey }) => {
 
 // ---------------------------------------------------------------- camera
 
+// The 3D views draw on demand: only when something changes (an edit, playback, the camera moving),
+// not 60 times a second while nothing moves – which keeps a laptop cool and the rest of the app quick.
+const wakers = new Set<() => void>();
+const wake = () => wakers.forEach((f) => f());
+const KeepFresh = () => {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    wakers.add(invalidate);
+    const unsub = useStore.subscribe(() => invalidate());
+    // a slow heartbeat catches anything that finishes loading in the background (textures, models)
+    const beat = window.setInterval(() => invalidate(), 1000);
+    return () => { wakers.delete(invalidate); unsub(); window.clearInterval(beat); };
+  }, [invalidate]);
+  return null;
+};
+
 // keys held for moving the 3D camera (W A S D / arrows, Q E turn, R F up/down, Shift faster)
 const held = new Set<string>();
 if (typeof window !== 'undefined') {
@@ -609,6 +644,7 @@ if (typeof window !== 'undefined') {
     if (['w', 'a', 's', 'd', 'q', 'e', 'r', 'f', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) {
       if (k === 'r' && st.selection) return; // R rotates a selected item
       held.add(k);
+      wake();
       if (k.startsWith('Arrow')) e.preventDefault();
     }
     if (e.key === 'Shift') held.add('shift');
@@ -680,9 +716,10 @@ const CameraRig = ({ layout, built, live }: { layout: Layout; built: BuiltActivi
     cam.updateProjectionMatrix();
   }, [preset, camera]);
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     const ctl = controls.current;
     if (!ctl) return;
+    if (held.size || anim.current) state.invalidate();
     // keyboard movement: switches to "Walk around" and moves the camera and what it looks at together
     if (held.size && !(held.size === 1 && held.has('shift'))) {
       if (useStore.getState().camera !== 'free') { anim.current = null; useStore.setState({ camera: 'free' }); }
@@ -842,12 +879,14 @@ export const Scene3D = ({ layoutKey, label }: { layoutKey: LayoutKey; label?: st
   return (
     <div className="scene3d">
       <Canvas
+        frameloop="demand"
         shadows={{ type: THREE.PCFSoftShadowMap }}
         dpr={hq ? [1, 2] : [1, 1.25]}
         gl={{ antialias: !hq, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05, preserveDrawingBuffer: true }}
         camera={{ fov: 50, near: 0.05, far: 100, position: [-3, 6, 8] }}
         onPointerMissed={() => clear({ selection: null })}
       >
+        <KeepFresh />
         <Suspense fallback={null}>
           <SceneContents layoutKey={layoutKey} />
         </Suspense>
