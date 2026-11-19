@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { layoutBounds, layoutCentre, wallDir, wallLength, wallNormal } from '../model/geometry';
 import type { FloorFinish, Layout, Opening, Wall } from '../model/types';
 import { M, boxOn, mesh, paint, rod, std } from './build';
-import { carpetTexture, outdoorTexture, tileTexture, timberTexture, vinylTexture, wallTileTexture } from './textures';
+import { vinylTexture } from './textures';
+import { photoMaterial, type Photo } from './photoTextures';
 import { roomsOf, wallFace, type Room } from '../model/finishes';
 
 export interface WallBuild {
@@ -20,14 +21,10 @@ const LOW = 0.32;
 const capMat = std('#8f8a82', 0.9);
 const skirtingMat = paint('#f7f6f2', 0.5);
 
-const tileMat = (len: number, h: number) => {
-  const t = wallTileTexture().clone();
-  t.needsUpdate = true;
-  t.repeat.set(len / 1.2, h / 1.2);
-  const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 });
-  m.userData.own = true;
-  return m;
-};
+// wall tiles: the floor-tile photo at half size (150 mm tiles), glossy
+const tileMat = (len: number, h: number) => photoMaterial('tiles', len * 2, h * 2, { roughness: 0.3, normal: 0.5 });
+// face brick on the outside of the house
+const brickMat = (len: number, h: number) => photoMaterial('brick', len, h, { roughness: 0.9, normal: 1 });
 
 /** height of a tiled splashback */
 const HALF_TILES = 1.2;
@@ -59,7 +56,7 @@ const piece = (layout: Layout, rooms: Room[], w: Wall, u0: number, u1: number, y
   const d = wallDir(w), um = ((u0 + u1) / 2) * 1000;
   const at = { x: w.a.x + d.x * um, y: w.a.y + d.y * um };
   const faces = ([0, 1] as const).map((side) => wallFace(layout, rooms, w, side, at));
-  const mats = faces.map((f) => (f.tiles === 'full' && !f.painted ? tileMat(len, h) : paint(f.colour, 0.85)));
+  const mats = faces.map((f) => (f.painted ? paint(f.colour, 0.85) : f.outside ? brickMat(len, h) : f.tiles === 'full' ? tileMat(len, h) : paint(f.colour, 0.85)));
   const geo = new THREE.BoxGeometry(len, h, t);
   const m = new THREE.Mesh(geo, [mats[0], mats[0], capMat, mats[0], mats[0], mats[1]]);
   m.position.set(u0 - ext0 + len / 2, y0 + h / 2, 0);
@@ -199,24 +196,25 @@ export const buildWalls = (layout: Layout): WallBuild[] => {
   return out;
 };
 
-/** average colour of each floor texture, so a chosen colour can tint it */
-const FLOOR_BASE: Record<FloorFinish, [number, number, number]> = { timber: [168, 120, 78], tiles: [214, 212, 206], carpet: [150, 140, 128], vinyl: [196, 190, 178], concrete: [190, 188, 182] };
+/** floors: photographic textures (vinyl stays a generated speckle) */
+const FLOOR_PHOTO: Partial<Record<FloorFinish, { photo: Photo; roughness: number }>> = {
+  timber: { photo: 'timber', roughness: 0.55 }, tiles: { photo: 'tiles', roughness: 0.6 }, carpet: { photo: 'carpet', roughness: 1 }, concrete: { photo: 'concrete', roughness: 0.7 },
+};
+const VINYL_MEAN: [number, number, number] = [196, 190, 178];
 
 export const floorMaterialOf = (floor: FloorFinish, colour: string | undefined, wM: number, dM: number) => {
-  const [tex, size, rough] =
-    floor === 'timber' ? [timberTexture(), 1.6, 0.55] :
-    floor === 'tiles' ? [tileTexture(), 1.2, 0.35] :
-    floor === 'carpet' ? [carpetTexture(), 1, 1] :
-    floor === 'concrete' ? [outdoorTexture('concrete'), 1, 0.8] : [vinylTexture(), 0.8, 0.6];
-  const t = (tex as THREE.Texture).clone();
+  const ph = FLOOR_PHOTO[floor];
+  // plain tiles default to a light grey rather than the white of the photo
+  if (ph) return photoMaterial(ph.photo, wM, dM, { colour: colour ?? (floor === 'tiles' ? '#d6d4ce' : undefined), roughness: ph.roughness, normal: floor === 'carpet' ? 0.4 : 0.7 });
+  const t = vinylTexture().clone();
   t.needsUpdate = true;
-  t.repeat.set(wM / (size as number), dM / (size as number));
-  const m = new THREE.MeshStandardMaterial({ map: t, roughness: rough as number, metalness: 0 });
+  t.repeat.set(wM / 0.8, dM / 0.8);
+  const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, metalness: 0 });
   if (colour) {
-    // the texture is multiplied by the colour in linear space: scale so its average becomes the swatch
-    const c = new THREE.Color(colour), b = new THREE.Color().setRGB(...(FLOOR_BASE[floor].map((v) => v / 255) as [number, number, number]), THREE.SRGBColorSpace);
+    const c = new THREE.Color(colour), b = new THREE.Color().setRGB(...(VINYL_MEAN.map((v) => v / 255) as [number, number, number]), THREE.SRGBColorSpace);
     m.color.setRGB(c.r / b.r, c.g / b.g, c.b / b.b);
   }
+  m.userData.own = true;
   return m;
 };
 

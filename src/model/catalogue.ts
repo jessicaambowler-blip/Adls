@@ -66,6 +66,7 @@ export const CATALOGUE: CatalogueEntry[] = [
   { kind: 'curtains', label: 'Curtains', group: 'Decor', w: 1800, d: 120, h: 2150, blocks: false, wallMounted: true, description: 'Curtains on a rod; set the width to the window plus a little each side.' },
   { kind: 'blind', label: 'Roller blind', group: 'Decor', w: 1500, d: 60, h: 1250, elevation: 950, blocks: false, wallMounted: true, description: 'Roller blind over a window, partly down.' },
   { kind: 'towel-rail', label: 'Towel rail', group: 'Bathroom', w: 600, d: 90, h: 60, elevation: 1100, blocks: false, wallMounted: true, description: 'Towel rail with a towel.' },
+  { kind: 'outdoor-setting', label: 'Outdoor table & chairs', group: 'Outdoor', w: 1100, d: 1800, h: 860, blocks: true, description: 'Small outdoor table with two chairs.' },
   { kind: 'patio', label: 'Covered patio', group: 'Outdoor', w: 4000, d: 3000, h: 2600, blocks: false, description: 'Patio roof on posts (the posts do not block the wheelchair here).' },
   { kind: 'turning-space', label: 'Turning space marker', group: 'Planning aids', w: 1500, d: 1500, h: 5, blocks: false, description: 'Circle marking a turning space for discussion. Diameter is editable.' },
 ];

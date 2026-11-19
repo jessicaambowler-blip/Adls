@@ -80,6 +80,7 @@ export type ItemKind =
   | 'blind'
   | 'towel-rail'
   | 'patio'
+  | 'outdoor-setting'
   | 'plant'
   | 'turning-space'
   | 'imported';

@@ -18,6 +18,7 @@ import { SUPPORT_PERSONA, applyPose, buildAvatar, type AvatarRig } from './avata
 import { buildItem } from './furniture';
 import { hasRealModel, realModel } from './realModels';
 import { buildWalls, floorMaterial, floorMaterialOf } from './walls';
+import { photoMaterial, skyTexture } from './photoTextures';
 import { finishOf, roomsOf } from '../model/finishes';
 import { buildManualChair, buildPowerChair, type ChairRig } from './wheelchair';
 import { OriginalActors } from './OriginalActors';
@@ -45,7 +46,8 @@ const EnvironmentSetup = () => {
     const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = env;
     scene.environmentIntensity = 0.55;
-    scene.background = new THREE.Color('#dfe3e6');
+    scene.background = skyTexture();
+    scene.backgroundIntensity = 0.9;
     return () => { env.dispose(); pm.dispose(); };
   }, [gl, scene]);
   return null;
@@ -212,6 +214,9 @@ const RoomFinishes = ({ layout }: { layout: Layout }) => {
   );
 };
 
+/** size of the grass all round (m) */
+const GROUND = 160;
+
 const Floor = ({ layout }: { layout: Layout }) => {
   const b = layoutBounds({ ...layout, items: [] });
   const t = (layout.walls[0]?.thickness ?? 110) / 2;
@@ -220,6 +225,7 @@ const Floor = ({ layout }: { layout: Layout }) => {
   const ceil = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f6f5f2', roughness: 0.95 }), []);
   const all = layoutBounds(layout);
   const gy = (layout.ground ?? 0) / 1000;
+  const groundMat = useMemo(() => photoMaterial('grass', GROUND, GROUND, { colour: '#7b8a52', roughness: 1 }), []);
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[(b.minX + b.maxX) / 2000, 0, (b.minY + b.maxY) / 2000]} receiveShadow material={mat}>
@@ -229,10 +235,9 @@ const Floor = ({ layout }: { layout: Layout }) => {
       <mesh rotation-x={Math.PI / 2} position={[(b.minX + b.maxX) / 2000, layout.ceilingHeight / 1000, (b.minY + b.maxY) / 2000]} material={ceil}>
         <planeGeometry args={[w + 0.2, d + 0.2]} />
       </mesh>
-      {/* surrounding ground (outside the house), at the ground level */}
-      <mesh rotation-x={-Math.PI / 2} position={[(all.minX + all.maxX) / 2000, gy - 0.003, (all.minY + all.maxY) / 2000]} receiveShadow>
-        <planeGeometry args={[(all.maxX - all.minX) / 1000 + 14, (all.maxY - all.minY) / 1000 + 14]} />
-        <meshStandardMaterial color="#cfd2cc" roughness={1} />
+      {/* surrounding ground (outside the house), at the ground level: grass out to the horizon */}
+      <mesh rotation-x={-Math.PI / 2} position={[(all.minX + all.maxX) / 2000, gy - 0.003, (all.minY + all.maxY) / 2000]} receiveShadow material={groundMat}>
+        <planeGeometry args={[GROUND, GROUND]} />
       </mesh>
       {/* the house's slab edge when the floor sits above the ground */}
       {gy < -0.01 && (

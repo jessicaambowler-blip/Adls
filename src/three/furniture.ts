@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Item } from '../model/types';
 import { M, boxOn, cyl, fabric, lathe, mesh, paint, rbox, rod, std, tube } from './build';
-import { leafTexture, outdoorTexture, rugTexture } from './textures';
+import { leafTexture, rugTexture } from './textures';
+import { photoMaterial, type Photo } from './photoTextures';
 
 // Procedural furniture & fixtures. Each builder returns a group whose origin is the centre of the
 // item's footprint on the floor, front facing +z, sized from the item's mm dimensions.
@@ -470,12 +471,10 @@ const ramp: Builder = (w, d, h, it) => {
 
 const step: Builder = (w, d, h) => G(boxOn(w, h, d, h < 0.06 ? M.aluminium : concrete(), 0, 0, 0, Math.min(0.004, h / 3)));
 
+const SURFACE_PHOTO: Record<string, Photo> = { lawn: 'grass', pavers: 'pavers', concrete: 'concrete', gravel: 'gravel', decking: 'planks' };
 const surface: Builder = (w, d, _h, it) => {
   const kind = it.surface ?? 'lawn';
-  const tex = outdoorTexture(kind).clone();
-  tex.needsUpdate = true;
-  tex.repeat.set(w, d);
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: kind === 'concrete' || kind === 'pavers' ? 0.85 : 1 });
+  const m = photoMaterial(SURFACE_PHOTO[kind] ?? 'grass', w, d, { roughness: kind === 'concrete' || kind === 'pavers' ? 0.8 : 1, normal: kind === 'lawn' ? 1 : 0.8 });
   const g = G(mesh(new THREE.BoxGeometry(w, 0.02, d), m, [0, 0.01 + (kind === 'lawn' ? 0 : 0.003), 0]));
   g.traverse((o) => { o.castShadow = false; });
   return g;
@@ -506,8 +505,11 @@ const gate: Builder = (w, _d, h) => {
   return g;
 };
 
+/** a timber planter box filled with mulch (the plants are added on top) */
+export const gardenBedBox = (w: number, d: number, h: number) => G(boxOn(w, h, d, paint('#7a5a3f', 0.9), 0, 0, 0, 0.01), boxOn(w - 0.08, 0.02, d - 0.08, paint('#4b3a2c', 1), 0, h - 0.015, 0, 0));
+
 const gardenBed: Builder = (w, d, h) => {
-  const g = G(boxOn(w, h, d, paint('#7a5a3f', 0.9), 0, 0, 0, 0.01), boxOn(w - 0.08, 0.02, d - 0.08, paint('#4b3a2c', 1), 0, h - 0.015, 0, 0));
+  const g = gardenBedBox(w, d, h);
   const leaf = paint('#4f7d3a', 0.9), bloom = paint('#d97aa0', 0.8);
   const n = Math.max(2, Math.round(w / 0.45));
   for (let i = 0; i < n; i++) {
@@ -680,7 +682,7 @@ const turningSpace: Builder = (w) => {
 const BUILDERS: Partial<Record<Item['kind'], Builder>> = {
   'bed-queen': bed, 'bed-single': bed, 'bed-adjustable': bed,
   'bedside-table': bedsideTable, wardrobe, drawers, armchair, sofa, 'dining-chair': diningChair, 'tv-unit': tvUnit, desk,
-  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), 'fold-rail': foldRail, 'table-lamp': tableLamp, 'wall-art': wallArt, mirror, 'ceiling-fan': ceilingFan, 'air-con': airCon, curtains, blind, 'towel-rail': towelRail, patio, 'floor-rail': floorRail, 'toilet-frame': toiletFrame, 'shower-seat': showerSeat, toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
+  recliner: (w, d, h, it) => BUILDERS.armchair!(w, d, h, it), 'outdoor-setting': (w, d, h) => G(boxOn(w * 0.6, 0.03, d * 0.5, M.oak, 0, h * 0.85, 0, 0.005)), 'fold-rail': foldRail, 'table-lamp': tableLamp, 'wall-art': wallArt, mirror, 'ceiling-fan': ceilingFan, 'air-con': airCon, curtains, blind, 'towel-rail': towelRail, patio, 'floor-rail': floorRail, 'toilet-frame': toiletFrame, 'shower-seat': showerSeat, toilet, basin, vanity: basin, shower, 'shower-commode': commode, 'grab-rail': grabRail, 'grab-rail-l': grabRailL, ramp, step, surface, fence, gate, 'garden-bed': gardenBed, tree, car, 'car-space': carSpace, bath,
   'mobile-hoist': hoist, 'kitchen-bench': kitchenBench, fridge, 'dining-table': diningTable,
   'hall-table': hallTable, rug, plant, 'turning-space': turningSpace,
 };

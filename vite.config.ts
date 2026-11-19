@@ -9,5 +9,5 @@ export default defineConfig({
   assetsInclude: ['**/*.glb'],
   base: './',
   // (models are embedded in their own small scripts, so the app is plain static files to host)
-  build: { chunkSizeWarningLimit: 2500, assetsInlineLimit: (file) => (file.endsWith('.glb') ? true : undefined) },
+  build: { chunkSizeWarningLimit: 2500, assetsInlineLimit: (file) => (file.endsWith('.glb') || file.includes('/assets/textures/') ? true : undefined) },
 });

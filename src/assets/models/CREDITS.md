@@ -49,9 +49,25 @@ meshes compressed (meshopt); fitted to each item's size in the app.
 | plant.glb | Potted Monstera Deliciosa Mid-Century | Pandurus | https://sketchfab.com/3d-models/1ab9bf841df04c07b1819be596327629 |
 | air-con.glb | Air condition Daikin | maxsbond.work | https://sketchfab.com/3d-models/26b0f7c8472741f4b85b889cf3b1d870 |
 | ceiling-fan.glb | Ceiling Fan | Ankush Gupta | https://sketchfab.com/3d-models/eb6f660bf970485ca9b22ddc12b565b2 |
+| car.glb | 2015 Hyundai Tucson | razor24 | https://sketchfab.com/3d-models/7674a3bd168a451daf73fc0a33d39589 |
 
 ## Care bed (NVIDIA Isaac Sim hospital environment, CC BY 4.0)
 
 | File | Model | Source |
 |---|---|---|
 | bed-adjustable.glb | SM_HospitalBed_02d | NVIDIA Isaac Sim assets, Environments/Hospital (CC BY 4.0) – converted from USD |
+
+## Garden and outdoor (Poly Haven, CC0)
+
+| File | Model | Authors | Source |
+|---|---|---|---|
+| tree.glb | Jacaranda Tree (simplified) | Rob Tuytel, Rico Cilliers | https://polyhaven.com/a/jacaranda_tree |
+| garden-bed.glb | Shrub 04 (planted along garden beds) | Rico Cilliers | https://polyhaven.com/a/shrub_04 |
+| outdoor-setting.glb | Outdoor Table Chair Set 01 | James Ray Cock | https://polyhaven.com/a/outdoor_table_chair_set_01 |
+
+## Textures (src/assets/textures)
+
+Surface textures from ambientCG (CC0): Grass004, Bricks105, PavingStones128, Concrete034, Gravel041,
+WoodFloor064, Tiles107, Carpet016, Planks037A – https://ambientcg.com. Sky: "Kloofendal 48d Partly
+Cloudy (Pure Sky)" by Greg Zaal, Poly Haven (CC0) – https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky.
+All resized for this app.

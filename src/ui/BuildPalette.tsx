@@ -49,7 +49,7 @@ const GROUPS: { name: string; entries: Entry[] }[] = [
       it('surface', '⁘', 'Gravel', 'Gravel – drag out the area on the plan', { surface: 'gravel', label: 'Gravel', w: 1200, d: 3000 }),
       it('surface', '☰', 'Decking', 'Decking – drag out the area on the plan', { surface: 'decking', label: 'Decking', w: 3000, d: 2400 }),
       it('fence', '┼', 'Fence'), it('gate', '⌐', 'Gate'), it('garden-bed', '✿', 'Garden'), it('tree', '🌳', 'Tree'),
-      it('car', '🚗', 'Car'), it('car-space', '🅿', 'Car space'), it('patio', '⌂', 'Patio', 'Covered patio (roof on posts)'),
+      it('car', '🚗', 'Car'), it('car-space', '🅿', 'Car space'), it('patio', '⌂', 'Patio', 'Covered patio (roof on posts)'), it('outdoor-setting', '⊤', 'Outdoor set', 'Outdoor table and chairs'),
     ],
   },
   {
